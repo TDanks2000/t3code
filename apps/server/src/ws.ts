@@ -1426,32 +1426,26 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
           observeRpcEffect(
             WS_METHODS.serverGetUsageSummary,
             (input.projectId
-              ? turnCostRepository.aggregateByProject(input.projectId).pipe(
-                  Effect.catch((_e) =>
-                    Effect.succeed({
-                      totalTurns: 0 as number,
-                      totalCostUsd: 0,
-                      totalInputTokens: 0,
-                      totalOutputTokens: 0,
-                    } as const),
-                  ),
-                  Effect.map(
-                    (agg) =>
-                      agg ?? {
-                        totalTurns: 0,
-                        totalCostUsd: 0,
-                        totalInputTokens: 0,
-                        totalOutputTokens: 0,
-                      },
-                  ),
-                )
-              : Effect.succeed({
+              ? turnCostRepository.aggregateByProject(input.projectId)
+              : turnCostRepository.aggregateAll
+            ).pipe(
+              Effect.catch((_e) =>
+                Effect.succeed({
                   totalTurns: 0,
                   totalCostUsd: 0,
                   totalInputTokens: 0,
                   totalOutputTokens: 0,
-                })
-            ).pipe(
+                }),
+              ),
+              Effect.map(
+                (agg) =>
+                  agg ?? {
+                    totalTurns: 0,
+                    totalCostUsd: 0,
+                    totalInputTokens: 0,
+                    totalOutputTokens: 0,
+                  },
+              ),
               Effect.map((agg) => ({
                 totalTurns: agg.totalTurns,
                 totalCostUsd: agg.totalCostUsd,
@@ -1468,21 +1462,22 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverListToolInvocations]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverListToolInvocations,
-            input.threadId
-              ? toolInvocationRepository.listByThreadId(input.threadId).pipe(
-                  Effect.catch((_e) => Effect.succeed([])),
-                  Effect.map((rows) =>
-                    rows.map((row) => ({
-                      id: row.invocationId,
-                      turnId: row.turnId,
-                      threadId: row.threadId,
-                      toolType: row.toolType,
-                      startedAt: row.startedAt ?? row.createdAt,
-                      createdAt: row.createdAt,
-                    })),
-                  ),
-                )
-              : Effect.succeed([]),
+            (input.threadId
+              ? toolInvocationRepository.listByThreadId(input.threadId)
+              : toolInvocationRepository.listAll({ limit: input.limit })
+            ).pipe(
+              Effect.catch((_e) => Effect.succeed([])),
+              Effect.map((rows) =>
+                rows.map((row) => ({
+                  id: row.invocationId,
+                  turnId: row.turnId,
+                  threadId: row.threadId,
+                  toolType: row.toolType,
+                  startedAt: row.startedAt ?? row.createdAt,
+                  createdAt: row.createdAt,
+                })),
+              ),
+            ),
             { "rpc.aggregate": "usage" },
           ),
         [WS_METHODS.subscribeAuthAccess]: (_input) =>

@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
+  ListAllToolInvocationsInput,
   ToolInvocationRepository,
   ToolInvocationRow,
   type ToolInvocationRepositoryShape,
@@ -121,6 +122,36 @@ const makeToolInvocationRepository = Effect.gen(function* () {
       `,
   });
 
+  const listAllInvocations = SqlSchema.findAll({
+    Request: ListAllToolInvocationsInput,
+    Result: ToolInvocationRow,
+    execute: (input) =>
+      sql`
+        SELECT
+          invocation_id AS "invocationId",
+          turn_id AS "turnId",
+          thread_id AS "threadId",
+          provider,
+          tool_type AS "toolType",
+          tool_name AS "toolName",
+          item_type AS "itemType",
+          status,
+          title,
+          input_preview AS "inputPreview",
+          output_preview AS "outputPreview",
+          file_paths_json AS "filePathsJson",
+          command,
+          exit_code AS "exitCode",
+          elapsed_ms AS "elapsedMs",
+          started_at AS "startedAt",
+          completed_at AS "completedAt",
+          created_at AS "createdAt"
+        FROM projection_tool_invocations
+        ORDER BY created_at DESC
+        LIMIT ${input.limit ?? -1}
+      `,
+  });
+
   const insert: ToolInvocationRepositoryShape["insert"] = (row) =>
     insertToolInvocationRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ToolInvocationRepository.insert:query")),
@@ -136,10 +167,16 @@ const makeToolInvocationRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ToolInvocationRepository.listByTurnId:query")),
     );
 
+  const listAll: ToolInvocationRepositoryShape["listAll"] = (input) =>
+    listAllInvocations(input).pipe(
+      Effect.mapError(toPersistenceSqlError("ToolInvocationRepository.listAll:query")),
+    );
+
   return {
     insert,
     listByThreadId,
     listByTurnId,
+    listAll,
   } satisfies ToolInvocationRepositoryShape;
 });
 

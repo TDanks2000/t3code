@@ -51,6 +51,16 @@ export interface TurnCostRepositoryShape {
     },
     ProjectionRepositoryError
   >;
+
+  readonly aggregateAll: Effect.Effect<
+    {
+      totalTurns: number;
+      totalCostUsd: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+    },
+    ProjectionRepositoryError
+  >;
 }
 
 export class TurnCostRepository extends Context.Service<

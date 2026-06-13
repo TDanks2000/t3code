@@ -140,16 +140,40 @@ const makeTurnCostRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("TurnCostRepository.listByProjectId:query")),
     );
 
+  const aggregateTurnCostsAll = SqlSchema.findOne({
+    Request: Schema.Struct({}),
+    Result: Schema.Struct({
+      totalTurns: Schema.Int,
+      totalCostUsd: Schema.Number,
+      totalInputTokens: Schema.Int,
+      totalOutputTokens: Schema.Int,
+    }),
+    execute: () =>
+      sql`
+        SELECT
+          CAST(COUNT(*) AS INTEGER) AS "totalTurns",
+          COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
+          COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+        FROM projection_turn_costs
+      `,
+  });
+
   const aggregateByProject: TurnCostRepositoryShape["aggregateByProject"] = (projectId) =>
     aggregateTurnCostsByProject({ projectId }).pipe(
       Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByProject:query")),
     );
+
+  const aggregateAll: TurnCostRepositoryShape["aggregateAll"] = aggregateTurnCostsAll({}).pipe(
+    Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateAll:query")),
+  );
 
   return {
     insert,
     listByThreadId,
     listByProjectId,
     aggregateByProject,
+    aggregateAll,
   } satisfies TurnCostRepositoryShape;
 });
 

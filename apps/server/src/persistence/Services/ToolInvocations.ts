@@ -35,6 +35,12 @@ export const ListToolInvocationsInput = Schema.Struct({
 });
 export type ListToolInvocationsInput = typeof ListToolInvocationsInput.Type;
 
+export const ListAllToolInvocationsInput = Schema.Struct({
+  limit: Schema.optional(NonNegativeInt),
+  offset: Schema.optional(NonNegativeInt),
+});
+export type ListAllToolInvocationsInput = typeof ListAllToolInvocationsInput.Type;
+
 export interface ToolInvocationRepositoryShape {
   readonly insert: (row: ToolInvocationRow) => Effect.Effect<void, ProjectionRepositoryError>;
 
@@ -44,6 +50,10 @@ export interface ToolInvocationRepositoryShape {
 
   readonly listByTurnId: (
     turnId: TurnId,
+  ) => Effect.Effect<ReadonlyArray<ToolInvocationRow>, ProjectionRepositoryError>;
+
+  readonly listAll: (
+    input: ListAllToolInvocationsInput,
   ) => Effect.Effect<ReadonlyArray<ToolInvocationRow>, ProjectionRepositoryError>;
 }
 

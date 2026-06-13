@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   CloudIcon,
   FolderPlusIcon,
+  LayoutDashboardIcon,
   SearchIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -2512,6 +2513,7 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
 
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (loc) => loc.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const handleSettingsClick = useCallback(() => {
     if (isMobile) {
@@ -2519,12 +2521,30 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     }
     void navigate({ to: "/settings" });
   }, [isMobile, navigate, setOpenMobile]);
+  const handleMissionBoardClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void navigate({ to: "/mission-board" });
+  }, [isMobile, navigate, setOpenMobile]);
+  const onMissionBoard = pathname === "/mission-board";
 
   return (
     <SidebarFooter className="p-2">
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+            onClick={handleMissionBoardClick}
+            data-active={onMissionBoard || undefined}
+          >
+            <LayoutDashboardIcon className="size-3.5" />
+            <span className="text-xs">Mission Board</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"

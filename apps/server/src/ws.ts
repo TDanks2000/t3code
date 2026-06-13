@@ -1435,9 +1435,22 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
                       totalOutputTokens: 0,
                     } as const),
                   ),
-                  Effect.map((agg) => agg ?? { totalTurns: 0, totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0 }),
+                  Effect.map(
+                    (agg) =>
+                      agg ?? {
+                        totalTurns: 0,
+                        totalCostUsd: 0,
+                        totalInputTokens: 0,
+                        totalOutputTokens: 0,
+                      },
+                  ),
                 )
-              : Effect.succeed({ totalTurns: 0, totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0 })
+              : Effect.succeed({
+                  totalTurns: 0,
+                  totalCostUsd: 0,
+                  totalInputTokens: 0,
+                  totalOutputTokens: 0,
+                })
             ).pipe(
               Effect.map((agg) => ({
                 totalTurns: agg.totalTurns,
@@ -1455,7 +1468,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverListToolInvocations]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverListToolInvocations,
-            (input.threadId
+            input.threadId
               ? toolInvocationRepository.listByThreadId(input.threadId).pipe(
                   Effect.catch((_e) => Effect.succeed([])),
                   Effect.map((rows) =>
@@ -1469,8 +1482,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
                     })),
                   ),
                 )
-              : Effect.succeed([])
-            ),
+              : Effect.succeed([]),
             { "rpc.aggregate": "usage" },
           ),
         [WS_METHODS.subscribeAuthAccess]: (_input) =>

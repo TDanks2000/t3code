@@ -1,25 +1,46 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
-import { NoActiveThreadState } from "../components/NoActiveThreadState";
+import { NoActiveThreadState, NoThreadsState } from "../components/NoActiveThreadState";
+import { WorkspaceOverview } from "../components/WorkspaceOverview";
 import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
 import { useSavedEnvironmentRegistryStore } from "../environments/runtime";
+import { useStore } from "../store";
 import { APP_DISPLAY_NAME } from "~/branding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import {
+  selectBootstrapCompleteAcrossEnvironments,
+  selectHasThreads,
+} from "../workspaceOverviewSelectors";
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
   const savedEnvironmentCount = useSavedEnvironmentRegistryStore(
     (state) => Object.keys(state.byId).length,
   );
+  const hasThreads = useStore(useShallow(selectHasThreads));
+  const bootstrapComplete = useStore(useShallow(selectBootstrapCompleteAcrossEnvironments));
 
   if (authGateState.status === "hosted-static" && savedEnvironmentCount === 0) {
     return <HostedStaticOnboardingState />;
   }
 
-  return <NoActiveThreadState />;
+  if (savedEnvironmentCount === 0) {
+    return <NoActiveThreadState />;
+  }
+
+  if (!bootstrapComplete) {
+    return <NoActiveThreadState />;
+  }
+
+  if (!hasThreads) {
+    return <NoThreadsState />;
+  }
+
+  return <WorkspaceOverview />;
 }
 
 export const Route = createFileRoute("/_chat/")({

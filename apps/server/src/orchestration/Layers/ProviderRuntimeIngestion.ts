@@ -1836,6 +1836,6 @@ export const ProviderRuntimeIngestionLive = Layer.effect(
   make,
 ).pipe(
   Layer.provide(ProjectionTurnRepositoryLive),
-  Layer.provide(TurnCostRepositoryLive),
-  Layer.provide(ToolInvocationRepositoryLive),
+  Layer.provideMerge(TurnCostRepositoryLive),
+  Layer.provideMerge(ToolInvocationRepositoryLive),
 );

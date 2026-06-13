@@ -942,8 +942,28 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description: command.description ?? command.input?.hint ?? "Run provider command",
         }),
       );
+      const skillItems = (selectedProviderStatus?.skills ?? [])
+        .filter((skill) => skill.enabled)
+        .map(
+          (skill) =>
+            ({
+              id: `skill:${selectedProvider}:${skill.name}`,
+              type: "skill" as const,
+              provider: selectedProvider,
+              skill,
+              label: formatProviderSkillDisplayName(skill),
+              description:
+                skill.shortDescription ??
+                skill.description ??
+                (skill.scope ? `${skill.scope} skill` : "Run provider skill"),
+            }) as const,
+        );
       const query = composerTrigger.query.trim().toLowerCase();
-      const slashCommandItems = [...builtInSlashCommandItems, ...providerSlashCommandItems];
+      const slashCommandItems = [
+        ...builtInSlashCommandItems,
+        ...providerSlashCommandItems,
+        ...skillItems,
+      ];
       if (!query) {
         return slashCommandItems;
       }
@@ -1034,6 +1054,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerMenuEmptyState = useMemo(() => {
     if (composerTriggerKind === "skill") {
       return "No skills found. Try / to browse provider commands.";
+    }
+    if (composerTriggerKind === "slash-command") {
+      return "No matching command or skill.";
     }
     return composerTriggerKind === "path"
       ? "No matching files or folders."

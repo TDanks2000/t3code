@@ -53,6 +53,8 @@ import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/uns
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { TurnCostRepository } from "./persistence/Services/TurnCosts.ts";
+import { ToolInvocationRepository } from "./persistence/Services/ToolInvocations.ts";
 import { ServerConfig } from "./config.ts";
 import { Keybindings } from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -268,6 +270,8 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
       const sessions = yield* SessionStore.SessionStore;
       const processDiagnostics = yield* ProcessDiagnostics.ProcessDiagnostics;
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
+      const turnCostRepository = yield* TurnCostRepository;
+      const toolInvocationRepository = yield* ToolInvocationRepository;
       const relayClient = yield* RelayClient.RelayClient;
       const authorizationError = (requiredScope: AuthEnvironmentScope) =>
         new EnvironmentAuthorizationError({
@@ -1421,22 +1425,54 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverGetUsageSummary]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverGetUsageSummary,
-            Effect.succeed({
-              totalTurns: 0,
-              totalCostUsd: 0,
-              totalInputTokens: 0,
-              totalOutputTokens: 0,
-              totalCachedInputTokens: 0,
-              totalReasoningTokens: 0,
-              byProvider: [],
-              byModel: [],
-            }),
+            (input.projectId
+              ? turnCostRepository.aggregateByProject(input.projectId).pipe(
+                  Effect.catch((_e) =>
+                    Effect.succeed({
+                      totalTurns: 0 as number,
+                      totalCostUsd: 0,
+                      totalInputTokens: 0,
+                      totalOutputTokens: 0,
+                    } as const),
+                  ),
+                  Effect.map((agg) => agg ?? { totalTurns: 0, totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0 }),
+                )
+              : Effect.succeed({ totalTurns: 0, totalCostUsd: 0, totalInputTokens: 0, totalOutputTokens: 0 })
+            ).pipe(
+              Effect.map((agg) => ({
+                totalTurns: agg.totalTurns,
+                totalCostUsd: agg.totalCostUsd,
+                totalInputTokens: agg.totalInputTokens,
+                totalOutputTokens: agg.totalOutputTokens,
+                totalCachedInputTokens: 0,
+                totalReasoningTokens: 0,
+                byProvider: [],
+                byModel: [],
+              })),
+            ),
             { "rpc.aggregate": "usage" },
           ),
         [WS_METHODS.serverListToolInvocations]: (input) =>
-          observeRpcEffect(WS_METHODS.serverListToolInvocations, Effect.succeed([]), {
-            "rpc.aggregate": "usage",
-          }),
+          observeRpcEffect(
+            WS_METHODS.serverListToolInvocations,
+            (input.threadId
+              ? toolInvocationRepository.listByThreadId(input.threadId).pipe(
+                  Effect.catch((_e) => Effect.succeed([])),
+                  Effect.map((rows) =>
+                    rows.map((row) => ({
+                      id: row.invocationId,
+                      turnId: row.turnId,
+                      threadId: row.threadId,
+                      toolType: row.toolType,
+                      startedAt: row.startedAt ?? row.createdAt,
+                      createdAt: row.createdAt,
+                    })),
+                  ),
+                )
+              : Effect.succeed([])
+            ),
+            { "rpc.aggregate": "usage" },
+          ),
         [WS_METHODS.subscribeAuthAccess]: (_input) =>
           observeRpcStreamEffect(
             WS_METHODS.subscribeAuthAccess,

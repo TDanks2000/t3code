@@ -183,7 +183,7 @@ function ToastDescriptionAndExpandable({
   const labels = toastData?.expandableLabels ?? {};
   const descriptionTrigger = toastData?.expandableDescriptionTrigger ?? false;
   const descriptionClassName = cn(
-    "min-w-0 select-text wrap-break-word text-muted-foreground",
+    "min-w-0 select-text wrap-break-word text-foreground/85",
     errorDescriptionClampClass(toastType, toastDescription),
   );
   const [open, setOpen] = useState(false);
@@ -235,7 +235,7 @@ function ToastDescriptionAndExpandable({
           <div className="min-w-0 flex-1">
             <Toast.Description
               className={cn(
-                "min-w-0 select-none wrap-break-word text-muted-foreground",
+                "min-w-0 select-none wrap-break-word text-foreground/85",
                 errorDescriptionClampClass(toastType, toastDescription),
                 "underline-offset-2 decoration-muted-foreground/60 group-hover:underline",
               )}
@@ -539,7 +539,7 @@ function Toasts({ position }: { position: ToastPosition }) {
     <Toast.Portal data-slot="toast-portal">
       <Toast.Viewport
         className={cn(
-          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
+          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 data-[position*=center]:max-w-lg data-[position*=center]:sm:max-w-xl [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
           // Vertical positioning
           "data-[position*=top]:top-[calc(var(--toast-inset)+var(--toast-header-offset))]",
           "data-[position*=bottom]:bottom-(--toast-inset)",

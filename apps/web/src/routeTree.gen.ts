@@ -14,22 +14,17 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsUsageRouteImport } from './routes/settings.usage'
 import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
-import { Route as SettingsUsageRouteImport } from './routes/settings.usage'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -40,6 +35,11 @@ const PairRoute = PairRouteImport.update({
   path: '/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ChatRoute = ChatRouteImport.update({
   id: '/_chat',
   getParentRoute: () => rootRouteImport,
@@ -48,6 +48,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatRoute,
+} as any)
+const SettingsUsageRoute = SettingsUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsSourceControlRoute = SettingsSourceControlRouteImport.update({
   id: '/source-control',
@@ -79,11 +84,6 @@ const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => SettingsRoute,
 } as any)
-const SettingsUsageRoute = SettingsUsageRouteImport.update({
-  id: '/usage',
-  path: '/usage',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
@@ -113,10 +113,12 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/source-control': typeof SettingsSourceControlRoute
+  '/settings/usage': typeof SettingsUsageRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
 }
 export interface FileRoutesByTo {
+  '/dashboard': typeof DashboardRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/archived': typeof SettingsArchivedRoute
@@ -217,18 +219,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/pair': {
       id: '/pair'
       path: '/pair'
       fullPath: '/pair'
       preLoaderRoute: typeof PairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_chat': {
@@ -244,6 +246,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/usage': {
+      id: '/settings/usage'
+      path: '/usage'
+      fullPath: '/settings/usage'
+      preLoaderRoute: typeof SettingsUsageRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/source-control': {
       id: '/settings/source-control'
@@ -285,13 +294,6 @@ declare module '@tanstack/react-router' {
       path: '/connections'
       fullPath: '/settings/connections'
       preLoaderRoute: typeof SettingsConnectionsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/usage': {
-      id: '/settings/usage'
-      path: '/usage'
-      fullPath: '/settings/usage'
-      preLoaderRoute: typeof SettingsUsageRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/archived': {

@@ -74,6 +74,8 @@ import {
   CheckpointDiffQuery,
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { TurnCostRepository } from "./persistence/Services/TurnCosts.ts";
+import { ToolInvocationRepository } from "./persistence/Services/ToolInvocations.ts";
 import { GitManager, type GitManagerShape } from "./git/GitManager.ts";
 import { Keybindings, type KeybindingsShape } from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -788,6 +790,33 @@ const buildAppUnderTest = (options?: {
           clear: Effect.void,
           ...options?.layers?.cloudCliTokenManager,
         }),
+      ),
+      Layer.provide(
+        Layer.succeed(
+          TurnCostRepository,
+          TurnCostRepository.of({
+            insert: () => Effect.void,
+            listByThreadId: () => Effect.succeed([]),
+            listByProjectId: () => Effect.succeed([]),
+            aggregateByProject: () =>
+              Effect.succeed({
+                totalTurns: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+              }),
+          }),
+        ),
+      ),
+      Layer.provide(
+        Layer.succeed(
+          ToolInvocationRepository,
+          ToolInvocationRepository.of({
+            insert: () => Effect.void,
+            listByThreadId: () => Effect.succeed([]),
+            listByTurnId: () => Effect.succeed([]),
+          }),
+        ),
       ),
       Layer.provideMerge(makeAuthTestLayer()),
       Layer.provideMerge(ServerSecretStore.layer),

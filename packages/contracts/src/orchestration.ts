@@ -1276,3 +1276,49 @@ export class OrchestrationReplayEventsError extends Schema.TaggedErrorClass<Orch
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}
+
+// ── Cost & Usage Aggregation ──────────────────────────────────────────
+
+export const UsageByProviderEntry = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  totalTurns: NonNegativeInt,
+  totalCostUsd: Schema.Number,
+  totalInputTokens: NonNegativeInt,
+  totalOutputTokens: NonNegativeInt,
+});
+export type UsageByProviderEntry = typeof UsageByProviderEntry.Type;
+
+export const UsageByModelEntry = Schema.Struct({
+  model: TrimmedNonEmptyString,
+  totalTurns: NonNegativeInt,
+  totalCostUsd: Schema.Number,
+  totalInputTokens: NonNegativeInt,
+  totalOutputTokens: NonNegativeInt,
+});
+export type UsageByModelEntry = typeof UsageByModelEntry.Type;
+
+export const CostAggregate = Schema.Struct({
+  projectId: Schema.optional(ProjectId),
+  periodStart: Schema.optional(IsoDateTime),
+  periodEnd: Schema.optional(IsoDateTime),
+  totalTurns: NonNegativeInt,
+  totalCostUsd: Schema.Number,
+  totalInputTokens: NonNegativeInt,
+  totalOutputTokens: NonNegativeInt,
+  totalCachedInputTokens: NonNegativeInt,
+  totalReasoningTokens: NonNegativeInt,
+  byProvider: Schema.Array(UsageByProviderEntry),
+  byModel: Schema.Array(UsageByModelEntry),
+});
+export type CostAggregate = typeof CostAggregate.Type;
+
+export const ToolInvocationQueryFilter = Schema.Struct({
+  threadId: Schema.optional(ThreadId),
+  turnId: Schema.optional(TurnId),
+  projectId: Schema.optional(ProjectId),
+  toolType: Schema.optional(TrimmedNonEmptyString),
+  status: Schema.optional(TrimmedNonEmptyString),
+  limit: Schema.optional(NonNegativeInt),
+  offset: Schema.optional(NonNegativeInt),
+});
+export type ToolInvocationQueryFilter = typeof ToolInvocationQueryFilter.Type;

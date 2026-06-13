@@ -151,6 +151,8 @@ export interface WsRpcClient {
       typeof WS_METHODS.serverGetProcessResourceHistory
     >;
     readonly signalProcess: RpcUnaryMethod<typeof WS_METHODS.serverSignalProcess>;
+    readonly getUsageSummary: RpcUnaryMethod<typeof WS_METHODS.serverGetUsageSummary>;
+    readonly listToolInvocations: RpcUnaryMethod<typeof WS_METHODS.serverListToolInvocations>;
   };
   readonly cloud: {
     readonly getRelayClientStatus: RpcUnaryNoArgMethod<typeof WS_METHODS.cloudGetRelayClientStatus>;
@@ -327,6 +329,10 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.serverGetProcessResourceHistory](input)),
       signalProcess: (input) =>
         transport.request((client) => client[WS_METHODS.serverSignalProcess](input)),
+      getUsageSummary: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetUsageSummary](input)),
+      listToolInvocations: (input) =>
+        transport.request((client) => client[WS_METHODS.serverListToolInvocations](input)),
     },
     cloud: {
       getRelayClientStatus: () =>

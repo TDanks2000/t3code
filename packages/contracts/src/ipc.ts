@@ -56,6 +56,7 @@ import type { ServerRemoveKeybindingInput, ServerUpsertKeybindingInput } from ".
 import * as Schema from "effect/Schema";
 import type {
   ClientOrchestrationCommand,
+  CostAggregate,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
@@ -64,7 +65,9 @@ import type {
   OrchestrationShellStreamItem,
   OrchestrationSubscribeThreadInput,
   OrchestrationThreadStreamItem,
+  ToolInvocationQueryFilter,
 } from "./orchestration.ts";
+import type { ToolInvocationRecord } from "./providerRuntime.ts";
 import { EnvironmentId } from "./baseSchemas.ts";
 import { AuthAccessTokenResult, AuthSessionState, AuthWebSocketTicketResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
@@ -520,6 +523,8 @@ export interface LocalApi {
       input: ServerProcessResourceHistoryInput,
     ) => Promise<ServerProcessResourceHistoryResult>;
     signalProcess: (input: ServerSignalProcessInput) => Promise<ServerSignalProcessResult>;
+    getUsageSummary: (input: ToolInvocationQueryFilter) => Promise<CostAggregate>;
+    listToolInvocations: (input: ToolInvocationQueryFilter) => Promise<ToolInvocationRecord[]>;
   };
 }
 

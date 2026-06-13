@@ -4,6 +4,7 @@ import {
   EventId,
   IsoDateTime,
   NonNegativeInt,
+  ProjectId,
   ProviderItemId,
   PositiveInt,
   RuntimeItemId,
@@ -589,6 +590,50 @@ const FilesPersistedPayload = Schema.Struct({
   ),
 });
 export type FilesPersistedPayload = typeof FilesPersistedPayload.Type;
+
+export const TurnCostCurrency = Schema.Literal("USD");
+export type TurnCostCurrency = typeof TurnCostCurrency.Type;
+
+export const TurnCost = Schema.Struct({
+  turnId: TurnId,
+  threadId: ThreadId,
+  projectId: Schema.optional(ProjectId),
+  provider: Schema.optional(TrimmedNonEmptyStringSchema),
+  model: Schema.optional(TrimmedNonEmptyStringSchema),
+  inputTokens: Schema.optional(NonNegativeInt),
+  outputTokens: Schema.optional(NonNegativeInt),
+  cachedInputTokens: Schema.optional(NonNegativeInt),
+  reasoningTokens: Schema.optional(NonNegativeInt),
+  totalTokens: Schema.optional(NonNegativeInt),
+  durationMs: Schema.optional(NonNegativeInt),
+  costUsd: Schema.optional(Schema.Number),
+  currency: TurnCostCurrency.pipe(Schema.withDecodingDefault(Effect.succeed("USD"))),
+  createdAt: IsoDateTime,
+});
+export type TurnCost = typeof TurnCost.Type;
+
+export const ToolInvocationRecord = Schema.Struct({
+  id: EventId,
+  turnId: TurnId,
+  threadId: ThreadId,
+  projectId: Schema.optional(ProjectId),
+  provider: Schema.optional(TrimmedNonEmptyStringSchema),
+  toolType: TrimmedNonEmptyStringSchema,
+  toolName: Schema.optional(TrimmedNonEmptyStringSchema),
+  itemType: Schema.optional(CanonicalItemType),
+  status: Schema.optional(RuntimeItemStatus),
+  title: Schema.optional(TrimmedNonEmptyStringSchema),
+  inputPreview: Schema.optional(Schema.String),
+  outputPreview: Schema.optional(Schema.String),
+  filePaths: Schema.optional(Schema.Array(TrimmedNonEmptyStringSchema)),
+  command: Schema.optional(Schema.String),
+  exitCode: Schema.optional(Schema.Int),
+  elapsedMs: Schema.optional(NonNegativeInt),
+  startedAt: IsoDateTime,
+  completedAt: Schema.optional(IsoDateTime),
+  createdAt: IsoDateTime,
+});
+export type ToolInvocationRecord = typeof ToolInvocationRecord.Type;
 
 const ToolDeniedPayload = Schema.Struct({
   toolName: TrimmedNonEmptyStringSchema,

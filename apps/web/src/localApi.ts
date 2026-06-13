@@ -1,4 +1,10 @@
-import type { ContextMenuItem, LocalApi } from "@t3tools/contracts";
+import type {
+  ContextMenuItem,
+  CostAggregate,
+  LocalApi,
+  ToolInvocationQueryFilter,
+  ToolInvocationRecord,
+} from "@t3tools/contracts";
 import type { WsRpcClient } from "@t3tools/client-runtime";
 
 import { resetVcsStatusStateForTests } from "./lib/vcsStatusState";
@@ -163,6 +169,15 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.server.signalProcess(input)
           : Promise.reject(unavailableLocalBackendError()),
+      getUsageSummary: (input) =>
+        rpcClient
+          ? rpcClient.server.getUsageSummary(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      listToolInvocations: async (input) => {
+        if (!rpcClient) throw unavailableLocalBackendError();
+        const result = await rpcClient.server.listToolInvocations(input);
+        return [...result];
+      },
     },
   };
 }

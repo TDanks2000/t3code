@@ -30,7 +30,12 @@ import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
+import { TurnCostRepository } from "../../persistence/Services/TurnCosts.ts";
+import { TurnCostRepositoryLive } from "../../persistence/Layers/TurnCosts.ts";
+import { ToolInvocationRepository } from "../../persistence/Services/ToolInvocations.ts";
+import { ToolInvocationRepositoryLive } from "../../persistence/Layers/ToolInvocations.ts";
 import { isGitRepository } from "../../git/Utils.ts";
+import { getModelPricing, computeCost } from "@t3tools/contracts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -633,6 +638,8 @@ const make = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
+  const turnCostRepository = yield* TurnCostRepository;
+  const toolInvocationRepository = yield* ToolInvocationRepository;
   const serverSettingsService = yield* ServerSettingsService;
   const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
     crypto.randomUUIDv4.pipe(
@@ -1575,6 +1582,115 @@ const make = Effect.gen(function* () {
         }
       }
 
+      if (event.type === "turn.completed") {
+        const turnId = toTurnId(event.turnId);
+        if (turnId) {
+          const usage = event.payload.usage as
+            | { input_tokens?: number; output_tokens?: number; cached_input_tokens?: number }
+            | undefined;
+          const inputTokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : 0;
+          const outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : 0;
+          const cachedInputTokens =
+            typeof usage?.cached_input_tokens === "number" ? usage.cached_input_tokens : 0;
+          const model =
+            typeof event.payload.modelUsage?.model === "string"
+              ? event.payload.modelUsage.model
+              : undefined;
+
+          let costUsd: number | undefined;
+          // Prefer the provider-reported cost (Claude SDK provides this).
+          if (typeof event.payload.totalCostUsd === "number") {
+            costUsd = event.payload.totalCostUsd;
+          } else if (model) {
+            costUsd = computeCost(model, inputTokens, outputTokens, cachedInputTokens) ?? 0;
+          } else {
+            costUsd = 0;
+          }
+
+          yield* turnCostRepository
+            .insert({
+              turnId,
+              threadId: thread.id,
+              projectId: thread.projectId,
+              provider: event.provider,
+              model,
+              inputTokens,
+              outputTokens,
+              cachedInputTokens,
+              reasoningTokens: 0,
+              totalTokens: inputTokens + outputTokens,
+              durationMs: 0,
+              costUsd,
+              currency: "USD",
+              createdAt: now,
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to record turn cost", {
+                  eventId: event.eventId,
+                  turnId,
+                  cause: Cause.pretty(cause),
+                }),
+              ),
+            );
+        }
+      }
+
+      if (event.type === "item.completed" && isToolLifecycleItemType(event.payload.itemType)) {
+        const turnId = toTurnId(event.turnId);
+        const invocationId = event.eventId;
+        if (turnId) {
+          const payloadData = event.payload.data as
+            | {
+                toolCallId?: string;
+                command?: string;
+                exitCode?: number;
+                path?: string;
+                filePath?: string;
+                result?: { path?: string; stdout?: string; stderr?: string };
+              }
+            | undefined;
+
+          const filePaths: string[] = [];
+          if (payloadData) {
+            if (payloadData.path) filePaths.push(payloadData.path);
+            if (payloadData.filePath) filePaths.push(payloadData.filePath);
+            if (payloadData.result?.path) filePaths.push(payloadData.result.path);
+          }
+
+          yield* toolInvocationRepository
+            .insert({
+              invocationId,
+              turnId,
+              threadId: thread.id,
+              provider: event.provider,
+              toolType: event.payload.itemType,
+              toolName: event.payload.title ?? undefined,
+              itemType: event.payload.itemType,
+              status: event.payload.status ?? undefined,
+              title: event.payload.title ?? undefined,
+              inputPreview: event.payload.detail ? event.payload.detail.slice(0, 500) : undefined,
+              outputPreview: undefined,
+              filePathsJson: filePaths.length > 0 ? filePaths.join("\n") : undefined,
+              command: payloadData?.command ?? undefined,
+              exitCode: payloadData?.exitCode ?? undefined,
+              elapsedMs: undefined,
+              startedAt: now,
+              completedAt: now,
+              createdAt: now,
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to record tool invocation", {
+                  eventId: event.eventId,
+                  turnId,
+                  cause: Cause.pretty(cause),
+                }),
+              ),
+            );
+        }
+      }
+
       if (event.type === "session.exited") {
         yield* clearTurnStateForSession(thread.id);
       }
@@ -1718,4 +1834,8 @@ const make = Effect.gen(function* () {
 export const ProviderRuntimeIngestionLive = Layer.effect(
   ProviderRuntimeIngestionService,
   make,
-).pipe(Layer.provide(ProjectionTurnRepositoryLive));
+).pipe(
+  Layer.provide(ProjectionTurnRepositoryLive),
+  Layer.provide(TurnCostRepositoryLive),
+  Layer.provide(ToolInvocationRepositoryLive),
+);

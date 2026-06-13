@@ -46,6 +46,7 @@ import {
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
+  CostAggregate,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
@@ -56,8 +57,10 @@ import {
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
+  ToolInvocationQueryFilter,
 } from "./orchestration.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { ToolInvocationRecord } from "./providerRuntime.ts";
 import {
   RelayClientInstallFailedError,
   RelayClientInstallProgressEventSchema,
@@ -179,6 +182,10 @@ export const WS_METHODS = {
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
   sourceControlPublishRepository: "sourceControl.publishRepository",
+
+  // Usage / cost methods
+  serverGetUsageSummary: "server.getUsageSummary",
+  serverListToolInvocations: "server.listToolInvocations",
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -545,6 +552,18 @@ export const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess,
   stream: true,
 });
 
+export const WsServerGetUsageSummaryRpc = Rpc.make(WS_METHODS.serverGetUsageSummary, {
+  payload: ToolInvocationQueryFilter,
+  success: CostAggregate,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsServerListToolInvocationsRpc = Rpc.make(WS_METHODS.serverListToolInvocations, {
+  payload: ToolInvocationQueryFilter,
+  success: Schema.Array(ToolInvocationRecord),
+  error: EnvironmentAuthorizationError,
+});
+
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
@@ -599,4 +618,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsServerGetUsageSummaryRpc,
+  WsServerListToolInvocationsRpc,
 );

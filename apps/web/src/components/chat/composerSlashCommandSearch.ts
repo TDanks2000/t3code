@@ -7,10 +7,7 @@ import {
 import type { ComposerCommandItem } from "./ComposerCommandMenu";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 
-function scoreSlashCommandItem(
-  item: ComposerCommandItem,
-  query: string,
-): number | null {
+function scoreSlashCommandItem(item: ComposerCommandItem, query: string): number | null {
   if (item.type === "path") return null;
   const primaryValue =
     item.type === "slash-command"
@@ -53,14 +50,19 @@ export function searchSlashCommandItems(
     Extract<ComposerCommandItem, { type: "slash-command" | "provider-slash-command" | "skill" }>
   >,
   query: string,
-): Array<Extract<ComposerCommandItem, { type: "slash-command" | "provider-slash-command" | "skill" }>> {
+): Array<
+  Extract<ComposerCommandItem, { type: "slash-command" | "provider-slash-command" | "skill" }>
+> {
   const normalizedQuery = normalizeSearchQuery(query, { trimLeadingPattern: /^\/+/ });
   if (!normalizedQuery) {
     return [...items];
   }
 
   const ranked: Array<{
-    item: Extract<ComposerCommandItem, { type: "slash-command" | "provider-slash-command" | "skill" }>;
+    item: Extract<
+      ComposerCommandItem,
+      { type: "slash-command" | "provider-slash-command" | "skill" }
+    >;
     score: number;
     tieBreaker: string;
   }> = [];

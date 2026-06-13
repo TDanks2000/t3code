@@ -183,6 +183,8 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.subscribeServerConfig, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeServerLifecycle, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeAuthAccess, AuthAccessReadScope],
+  [WS_METHODS.serverGetUsageSummary, AuthOrchestrationReadScope],
+  [WS_METHODS.serverListToolInvocations, AuthOrchestrationReadScope],
 ]);
 
 function toAuthAccessStreamEvent(
@@ -1416,6 +1418,25 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
             }),
             { "rpc.aggregate": "server" },
           ),
+        [WS_METHODS.serverGetUsageSummary]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.serverGetUsageSummary,
+            Effect.succeed({
+              totalTurns: 0,
+              totalCostUsd: 0,
+              totalInputTokens: 0,
+              totalOutputTokens: 0,
+              totalCachedInputTokens: 0,
+              totalReasoningTokens: 0,
+              byProvider: [],
+              byModel: [],
+            }),
+            { "rpc.aggregate": "usage" },
+          ),
+        [WS_METHODS.serverListToolInvocations]: (input) =>
+          observeRpcEffect(WS_METHODS.serverListToolInvocations, Effect.succeed([]), {
+            "rpc.aggregate": "usage",
+          }),
         [WS_METHODS.subscribeAuthAccess]: (_input) =>
           observeRpcStreamEffect(
             WS_METHODS.subscribeAuthAccess,

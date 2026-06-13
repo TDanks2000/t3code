@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   BotIcon,
+  DollarSignIcon,
   GitBranchIcon,
   KeyboardIcon,
   Link2Icon,
@@ -28,7 +29,8 @@ export type SettingsSectionPath =
   | "/settings/providers"
   | "/settings/source-control"
   | "/settings/connections"
-  | "/settings/archived";
+  | "/settings/archived"
+  | "/settings/usage";
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   label: string;
@@ -40,6 +42,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
+  { label: "Usage", to: "/settings/usage", icon: DollarSignIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];
 

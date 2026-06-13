@@ -7,6 +7,7 @@ import {
   type ProviderSession,
   RuntimeItemId,
   RuntimeRequestId,
+  RuntimeTaskId,
   ThreadId,
   type ToolLifecycleItemType,
   TurnId,
@@ -80,6 +81,8 @@ interface OpenCodeSessionContext {
   activeTurnId: TurnId | undefined;
   activeAgent: string | undefined;
   activeVariant: string | undefined;
+  activeStepAgent: string | undefined;
+  stepSeq: number;
   /**
    * One-shot guard flipped by `stopOpenCodeContext` / `emitUnexpectedExit`.
    * The session lifecycle is owned by `sessionScope`; this Ref exists only
@@ -955,6 +958,88 @@ export function makeOpenCodeAdapter(
           break;
         }
 
+        case "session.next.step.started": {
+          context.activeStepAgent = event.properties.agent;
+          const stepId = ++context.stepSeq;
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              raw: event,
+            })),
+            type: "task.started",
+            payload: {
+              taskId: RuntimeTaskId.make(String(stepId)),
+              taskType: event.properties.agent,
+            },
+          });
+          break;
+        }
+
+        case "session.next.step.ended": {
+          const finishedAgent = context.activeStepAgent;
+          context.activeStepAgent = undefined;
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              raw: event,
+            })),
+            type: "task.completed",
+            payload: {
+              taskId: RuntimeTaskId.make(String(context.stepSeq)),
+              status: "completed",
+              summary: finishedAgent ? `${finishedAgent} step finished` : "Step finished",
+            },
+          });
+          break;
+        }
+
+        case "session.next.step.failed": {
+          const failedAgent = context.activeStepAgent;
+          context.activeStepAgent = undefined;
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              raw: event,
+            })),
+            type: "task.completed",
+            payload: {
+              taskId: RuntimeTaskId.make(String(context.stepSeq)),
+              status: "failed",
+              summary: event.properties.error?.message
+                ? `${failedAgent ?? "Step"} failed: ${event.properties.error.message}`
+                : `${failedAgent ?? "Step"} failed`,
+            },
+          });
+          break;
+        }
+
+        case "todo.updated": {
+          const todos = event.properties.todos;
+          if (todos.length === 0) break;
+          const plan = todos.map((todo) => ({
+            step: todo.content,
+            status:
+              todo.status === "in_progress"
+                ? ("inProgress" as const)
+                : todo.status === "completed"
+                  ? ("completed" as const)
+                  : ("pending" as const),
+          }));
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              raw: event,
+            })),
+            type: "turn.plan.updated",
+            payload: { plan },
+          });
+          break;
+        }
+
         default:
           break;
       }
@@ -1124,6 +1209,8 @@ export function makeOpenCodeAdapter(
           activeTurnId: undefined,
           activeAgent: undefined,
           activeVariant: undefined,
+          activeStepAgent: undefined,
+          stepSeq: 0,
           stopped: yield* Ref.make(false),
           sessionScope: started.sessionScope,
         };

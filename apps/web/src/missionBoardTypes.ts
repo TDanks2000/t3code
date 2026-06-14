@@ -41,6 +41,7 @@ export interface MissionBoardCard {
   missionReviewStatus?: MissionReviewStatus;
   reviewedAt?: string;
   hasNewActivityAfterReview?: boolean;
+  draftId?: string;
   availableActions: MissionBoardAction[];
 }
 

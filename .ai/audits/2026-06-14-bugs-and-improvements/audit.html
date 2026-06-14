@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T3 Code Audit — Bugs &amp; Improvements</title>
+    <meta name="strategist-type" content="audit" />
+    <meta name="strategist-slug" content="bugs-and-improvements" />
+    <meta name="strategist-created" content="2026-06-14" />
+    <meta name="strategist-status" content="ready" />
+    <meta
+      name="strategist-target"
+      content="apps/server/src, apps/web/src, packages/client-runtime, packages/contracts"
+    />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.6;
+        color: #1a1a2e;
+        background: #fafafa;
+      }
+      h1 {
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 0.5rem;
+      }
+      h2 {
+        margin-top: 2rem;
+      }
+      h3 {
+        margin-top: 1.5rem;
+      }
+      .finding {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin: 1rem 0;
+      }
+      .finding h3 {
+        margin-top: 0;
+      }
+      .critical {
+        border-left: 4px solid #dc2626;
+      }
+      .high {
+        border-left: 4px solid #ea580c;
+      }
+      .medium {
+        border-left: 4px solid #d97706;
+      }
+      .low {
+        border-left: 4px solid #6b7280;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        margin-right: 0.5rem;
+      }
+      .tag-critical {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .tag-high {
+        background: #ffedd5;
+        color: #9a3412;
+      }
+      .tag-medium {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .tag-low {
+        background: #f3f4f6;
+        color: #374151;
+      }
+      code {
+        background: #f1f5f9;
+        padding: 0.15rem 0.35rem;
+        border-radius: 3px;
+        font-size: 0.85rem;
+      }
+      pre {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 0.85rem;
+      }
+      .file {
+        font-family: monospace;
+        font-size: 0.85rem;
+        color: #2563eb;
+      }
+      .severity {
+        margin-top: 0.5rem;
+      }
+      .recommended {
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>T3 Code Audit — Bugs &amp; Improvements</h1>
+
+      <section aria-labelledby="tldr">
+        <h2 id="tldr">TL;DR</h2>
+        <p>
+          Audited the T3 Code monorepo (server WebSocket handler, web app, client-runtime,
+          contracts) for bugs, maintainability issues, and improvement opportunities. Found
+          <strong>1 critical</strong>, <strong>2 high</strong>, <strong>4 medium</strong>, and
+          <strong>6 low</strong> priority findings. The critical finding is a race condition in
+          WebSocket transport disconnect handling. The most impactful fix is the
+          <code>onResubscribe</code> double-firing bug in <code>wsTransport.ts</code> that causes
+          state corruption on reconnect.
+        </p>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- CRITICAL -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="critical">
+        <h2 id="critical">Critical</h2>
+
+        <div class="finding critical">
+          <h3 id="C1">
+            C1: <code>intentionalCloseDepth</code> underflow on concurrent
+            <code>closeSession</code> calls
+          </h3>
+          <div>
+            <span class="tag tag-critical">critical</span>
+            <span class="file">packages/client-runtime/src/wsTransport.ts:262-268</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> <code>closeSession()</code> increments
+            <code>this.intentionalCloseDepth</code> at line 263 but the decrement runs in a
+            <code>.finally()</code> callback at line 265. If <code>closeSession()</code> is called
+            concurrently (e.g., from rapid reconnects), the depth counter can underflow below zero,
+            causing <code>isCloseIntentional()</code> to return false for intentional closes.
+          </p>
+          <pre>
+this.intentionalCloseDepth += 1;
+return session.runtime.runPromise(Scope.close(session.clientScope, Exit.void)).finally(() => {
+  this.intentionalCloseDepth = Math.max(0, this.intentionalCloseDepth - 1); // underflow possible
+  session.runtime.dispose();
+});</pre
+          >
+          <p>
+            <strong>Why it matters:</strong> When <code>isCloseIntentional</code> returns false
+            during an intentional reconnect, the transport may treat a clean close as a connection
+            error, triggering unnecessary warning logs and subscribe resets.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Use a <code>ReadonlySet</code> of session IDs or an
+            <code>AtomicReference</code> with compare-and-swap to track intentional close state
+            per-session rather than a shared counter.
+          </p>
+        </div>
+
+        <div class="finding critical">
+          <h3 id="C2">
+            C2: <code>onResubscribe</code> callback fires <strong>twice</strong> per resubscribe
+          </h3>
+          <div>
+            <span class="tag tag-critical">critical</span>
+            <span class="file">packages/client-runtime/src/wsTransport.ts:150-152, 167-171</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> When a stream connection drops and the retry loop begins,
+            <code>onResubscribe</code> is called from two separate code paths:
+          </p>
+          <ol>
+            <li>
+              Line 150-152: in the <code>onStreamRequestStart</code> listener (fired when a new WS
+              request for the same tag is detected)
+            </li>
+            <li>Line 167-171: in the retry loop before reconnecting to the new session</li>
+          </ol>
+          <p>
+            <strong>Why it matters:</strong> Any subscriber hook that resets state (e.g., clearing a
+            cached VCS status, resetting UI loading indicators) will fire twice. This causes
+            flickering state transitions and can trigger double-side-effects like duplicate API
+            calls.
+          </p>
+          <pre>
+// Line 150 (in onStreamRequestStart):
+options?.onResubscribe?.();
+
+// ...
+
+// Line 168 (in retry loop):
+options?.onResubscribe?.(); // Called again immediately</pre
+          >
+          <p>
+            <strong>Recommended fix:</strong> Remove the call from either location. The retry loop
+            is the correct place since it is the single path that controls reconnection. The
+            <code>onStreamRequestStart</code> listener should only handle side effects that need to
+            happen <em>after</em> the new stream is created.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- HIGH -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="high">
+        <h2 id="high">High</h2>
+
+        <div class="finding high">
+          <h3 id="H1">
+            H1: <code>Effect.ignoreCause({ log: false })</code> silently swallows setup script
+            failures
+          </h3>
+          <div>
+            <span class="tag tag-high">high</span>
+            <span class="file">apps/server/src/ws.ts:560</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> In <code>recordSetupScriptLaunchFailure()</code>, the error
+            from <code>appendSetupScriptActivity</code> is swallowed with
+            <code>Effect.ignoreCause({ log: false })</code>. Every other usage of
+            <code>Effect.ignoreCause</code> in this file uses <code>{ log: true }</code>.
+          </p>
+          <pre>Effect.ignoreCause({ log: false }),</pre>
+          <p>
+            <strong>Why it matters:</strong> If <code>appendSetupScriptActivity</code> fails (e.g.,
+            because the thread was deleted before the activity was appended), the failure is
+            completely invisible — no log, no metric, no error reporting. A thread that was
+            successfully created but fails silently to report setup activity will appear stuck to
+            the user with no diagnostics.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Change to
+            <code>Effect.ignoreCause({ log: true })</code> to at minimum log the failure, or
+            restructure to not ignore at all.
+          </p>
+        </div>
+
+        <div class="finding high">
+          <h3 id="H2">
+            H2: <code>subscribe()</code> retry loop has no cancellation mechanism during
+            <code>dispose()</code>
+          </h3>
+          <div>
+            <span class="tag tag-high">high</span>
+            <span class="file">packages/client-runtime/src/wsTransport.ts:158-212</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The retry loop in <code>subscribe()</code> checks
+            <code>this.disposed</code> and <code>active</code> only at the top of each iteration. If
+            the loop is blocked on <code>await sleep(retryDelayMs)</code> at line 209, calling
+            <code>dispose()</code> will NOT cancel it — the loop will wait for the full delay, then
+            check <code>active</code> and exit. During that window, the subscription continues
+            attempting to reconnect to a disposed transport.
+          </p>
+          <pre>await sleep(retryDelayMs); // No abort signal, no timeout race</pre>
+          <p>
+            <strong>Why it matters:</strong> A disposed transport shouldn't continue making
+            WebSocket connections. The delay could be up to 250ms per the default, but during rapid
+            dispose/reconnect cycles this creates a leak of in-flight connection attempts.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Use an <code>AbortController</code> that is triggered
+            on dispose, and race the sleep against the abort signal:
+            <code>await Promise.race([sleep(retryDelayMs], abortSignal.then(...)])</code>.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- MEDIUM -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="medium">
+        <h2 id="medium">Medium</h2>
+
+        <div class="finding medium">
+          <h3 id="M1">M1: <code>requestStream</code> silently ignores listener errors</h3>
+          <div>
+            <span class="tag tag-medium">medium</span>
+            <span class="file">packages/client-runtime/src/wsTransport.ts:116-120</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> When processing stream values, listener errors are silently
+            caught and ignored:
+          </p>
+          <pre>
+listener(value); // If this throws, the error is silently swallowed
+} catch {
+  // Ignore listener errors so the stream can finish cleanly.
+}</pre
+          >
+          <p>
+            <strong>Why it matters:</strong> Buggy listener callbacks (e.g., in the VCS status
+            stream or thread detail stream) will fail silently. The stream "succeeds" but the
+            listener never processed the event. This can mask data loss.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> At minimum log the error. Or, depending on design,
+            fail the stream since a failed listener means the stream's purpose is compromised.
+          </p>
+        </div>
+
+        <div class="finding medium">
+          <h3 id="M2">
+            M2: <code>CursorTextGeneration</code> uses bare <code>Effect.ignore</code>
+          </h3>
+          <div>
+            <span class="tag tag-medium">medium</span>
+            <span class="file">apps/server/src/textGeneration/CursorTextGeneration.ts:107</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> Bare <code>Effect.ignore</code> (without
+            <code>{ log: true }</code>) completely silences the error from
+            <code>runtime.setMode("ask")</code>:
+          </p>
+          <pre>yield* Effect.ignore(runtime.setMode("ask"));</pre>
+          <p>
+            <strong>Why it matters:</strong> If setting the mode fails (e.g., the Cursor runtime is
+            in a bad state), the error is invisible. This is a fire-and-forget operation during text
+            generation that could silently fail to switch modes.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Change to
+            <code>Effect.ignoreCause({ log: true })</code> or <code>Effect.catchCause</code> with
+            explicit logging.
+          </p>
+        </div>
+
+        <div class="finding medium">
+          <h3 id="M3">
+            M3: <code>subscribe()</code> triggers <code>onResubscribe</code> on initial retry before
+            any value received
+          </h3>
+          <div>
+            <span class="tag tag-medium">medium</span>
+            <span class="file">packages/client-runtime/src/wsTransport.ts:166-172</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The retry loop calls <code>onResubscribe</code> when
+            <code>hasReceivedValue</code> is true (line 166), but if the initial stream never
+            delivers a value and fails, <code>hasReceivedValue</code> stays false — so the first
+            retry after failure won't trigger it. However, the
+            <code>onStreamRequestStart</code> listener (line 141-155) will trigger
+            <code>onResubscribe</code> regardless of <code>hasReceivedValue</code> as long as
+            <code>active</code> is true and the tag matches. This creates inconsistent behavior:
+            <code>onResubscribe</code> fires for the <code>onStreamRequestStart</code> path but NOT
+            for the retry loop path.
+          </p>
+          <p>
+            <strong>Why it matters:</strong> Inconsistent firing of <code>onResubscribe</code> makes
+            it unreliable for state-reset logic. Some resubscribes will reset state (when
+            <code>onStreamRequestStart</code> fires), others won't.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Unify the <code>onResubscribe</code> strategy. Either
+            always fire from the retry loop (remove from <code>onStreamRequestStart</code>), or
+            always fire from the listener, but not both with different conditions.
+          </p>
+        </div>
+
+        <div class="finding medium">
+          <h3 id="M4">
+            M4: <code>Effect.ignore</code> (bare) used in 3 adapter files swallows scope-close
+            errors
+          </h3>
+          <div>
+            <span class="tag tag-medium">medium</span>
+            <span class="file"
+              >apps/server/src/provider/Layers/CodexAdapter.ts:1451,1637<br />apps/server/src/provider/Layers/CursorAdapter.ts:467,1043<br />apps/server/src/provider/Layers/GrokAdapter.ts:324,873,963</span
+            >
+          </div>
+          <p>
+            <strong>Problem:</strong> Multiple adapter files use bare
+            <code>Effect.ignore(Scope.close(...))</code> without logging. If a scope close fails
+            (e.g., a child fiber is still running, a resource finalizer throws), the error is
+            invisible.
+          </p>
+          <pre>yield* Effect.ignore(Scope.close(session.scope, Exit.void));</pre>
+          <p>
+            <strong>Why it matters:</strong> Failed scope closes indicate leaked resources (open
+            file handles, running processes, dangling WebSocket connections). Silently ignoring
+            these defeats resource leak detection.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Use <code>Effect.ignoreCause({ log: true })</code> on
+            all scope-close operations so failures are at minimum logged.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- LOW -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="low">
+        <h2 id="low">Low</h2>
+
+        <div class="finding low">
+          <h3 id="L1">L1: <code>ws.ts</code> is 1578 lines — single file with all RPC handlers</h3>
+          <div>
+            <span class="tag tag-low">low</span> <span class="file">apps/server/src/ws.ts</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The WebSocket RPC handler file contains all orchestration,
+            server config, VCS, terminal, cloud, auth, and project handlers in one monolithic
+            function (<code>makeWsRpcLayer</code>). Every handler has access to all 40+ local
+            variables. Testing individual handlers in isolation is impossible without instantiating
+            the entire layer.
+          </p>
+          <p>
+            <strong>Why it matters:</strong> This is a major maintenance bottleneck. Adding a new
+            RPC method requires understanding the entire 1578-line closure. The in-scope variables
+            list alone is ~40 dependencies.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Split handlers into domain modules (e.g.,
+            <code>ws/rpc/terminal.ts</code>, <code>ws/rpc/vcs.ts</code>,
+            <code>ws/rpc/orchestration.ts</code>) with each module exporting handler factories that
+            accept only their required services.
+          </p>
+        </div>
+
+        <div class="finding low">
+          <h3 id="L2">L2: Static file serving (<code>GET *</code>) has no authentication</h3>
+          <div>
+            <span class="tag tag-low">low</span>
+            <span class="file">apps/server/src/http.ts:275-359</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The catch-all <code>GET *</code> route serves static files
+            without any authentication. When running in production/desktop mode with Tailscale Serve
+            or port exposure, any network peer could read the web UI's static assets.
+          </p>
+          <p>
+            <strong>Why it matters:</strong> While static assets are typically public for SPAs,
+            directory traversal protection exists but no auth means the full client source map and
+            JS bundle could be read. For a development tool this is low severity, but worth
+            documenting.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Add a config flag to enable auth on static routes for
+            non-loopback connections, or add a notice in the config docs.
+          </p>
+        </div>
+
+        <div class="finding low">
+          <h3 id="L3">
+            L3: <code>cloud.installRelayClient</code> discards the actual stream error
+          </h3>
+          <div>
+            <span class="tag tag-low">low</span>
+            <span class="file">packages/client-runtime/src/wsRpcClient.ts:340-355</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> When the relay client install stream fails, the error is
+            consumed by the stream mechanism and the fallback error message is generic: "Relay
+            client install stream completed without a final status." The actual error from the
+            server is lost.
+          </p>
+          <pre>
+if (installed) { return installed; }
+throw new Error("Relay client install stream completed without a final status.");</pre
+          >
+          <p>
+            <strong>Why it matters:</strong> Users see a vague error message instead of the actual
+            installation failure reason (network timeout, auth failure, disk full).
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Track the stream error and include it in the thrown
+            error message.
+          </p>
+        </div>
+
+        <div class="finding low">
+          <h3 id="L4">
+            L4: <code>clearPersistedServerRuntimeState</code> uses <code>fs.remove</code> with
+            <code>force: true</code>
+          </h3>
+          <div>
+            <span class="tag tag-low">low</span>
+            <span class="file">apps/server/src/serverRuntimeState.ts:56-60</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The cleanup of the server runtime state file on shutdown uses
+            <code>force: true</code> and <code>Effect.ignore({ log: true })</code>. If the file
+            can't be removed (permissions, filesystem error), the failure is invisible.
+          </p>
+          <p>
+            <strong>Why it matters:</strong> A stale runtime state file could cause the next server
+            start to read incorrect state (stale PID, wrong port). Not a data loss risk, but could
+            cause confusing startup failures.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Log at debug level if removal fails, or don't remove
+            at all — the server already handles stale state gracefully via
+            <code>readPersistedServerRuntimeState</code>'s use of <code>Effect.option</code>.
+          </p>
+        </div>
+
+        <div class="finding low">
+          <h3 id="L5">
+            L5: <code>getProjects()</code> and <code>getThreads()</code> in store.ts create new
+            arrays on every call
+          </h3>
+          <div>
+            <span class="tag tag-low">low</span>
+            <span class="file">apps/web/src/store.ts:500-512</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> <code>getProjects()</code> and
+            <code>getThreads()</code> iterate through all project/thread IDs and filter empty
+            entries. These functions create new arrays on every call. In a Zustand app, these are
+            likely called in selectors that run on every state change.
+          </p>
+          <p>
+            <strong>Why it matters:</strong> Creates unnecessary garbage collection pressure when
+            there are many projects/threads. Could cause React re-renders if used in
+            <code>useStore</code> selectors that don't memoize.
+          </p>
+          <p>
+            <strong>Recommended fix:</strong> Memoize results or restructure the store to
+            pre-compute derived arrays in the reducer.
+          </p>
+        </div>
+
+        <div class="finding low">
+          <h3 id="L6">
+            L6: <code>appendSetupScriptActivity</code> uses <code>tuple</code> workaround instead of
+            <code>Effect.all</code>
+          </h3>
+          <div>
+            <span class="tag tag-low">low</span>
+            <span class="file">apps/server/src/ws.ts:372-394</span>
+          </div>
+          <p>
+            <strong>Problem:</strong> The <code>serverCommandId</code> and
+            <code>serverEventId</code> are fetched via <code>Effect.all</code> (line 374-376) but
+            only one is actually used for the activity ID. The <code>serverEventId</code> is used
+            directly in the activity payload, but it's generated by mapping the UUID from
+            <code>randomUUID</code> which itself is derived from <code>crypto.randomUUIDv4</code>.
+            This adds unnecessary cryptographic work for a non-security-sensitive ID.
+          </p>
+          <pre>
+const serverEventId = randomUUID.pipe(Effect.map(EventId.make));
+// ...
+const commandId = yield* serverCommandId("setup-script-activity");
+// activityId is from serverEventId but it's just a unique identifier</pre
+          >
+          <p>
+            <strong>Why it matters:</strong> Minor performance concern. <code>randomUUIDv4</code> is
+            cryptographically secure but expensive; a simpler monotonic or random ID would suffice
+            for non-security event/activity IDs.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- ARCHITECTURE OBSERVATIONS -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="architecture">
+        <h2 id="architecture">Architecture Observations</h2>
+
+        <div class="finding">
+          <h3>Web store uses denormalized Zustand; mobile uses client-runtime managers</h3>
+          <p>
+            The <span class="file">apps/web/src/store.ts:46-50</span> has a large TODO comment
+            documenting that the web app still stores shell snapshots and thread details in a
+            denormalized Zustand shape while mobile uses <code>createShellSnapshotManager</code> and
+            <code>createThreadDetailManager</code> from <code>@t3tools/client-runtime</code>. The
+            web's Zustand store has grown to 820+ lines of immutable reducer functions that manually
+            manage thread/message/activity/plan/diff indexes. This duplication represents a
+            significant maintenance burden and divergence risk.
+          </p>
+          <p>
+            <strong>Recommended:</strong> Migrate web to use the same client-runtime managers. This
+            has been flagged as <code>TODO(CLIENT-RUNTIME MIGRATION)</code> in the code and prevents
+            both sharing new features and fixing bugs in the state management logic.
+          </p>
+        </div>
+
+        <div class="finding">
+          <h3><code>ws.ts</code> closure scope captures ~40 services for all handlers</h3>
+          <p>
+            The <code>makeWsRpcLayer</code> function in <code>ws.ts:232-1516</code> creates a single
+            closure with all ~40 service dependencies that every handler captures. This means even a
+            simple handler like <code>serverGetConfig</code> that only uses 5 services still holds
+            references to all 40. This prevents the GC from cleaning up any service even if only a
+            subset is in use, and couples every handler to every dependency.
+          </p>
+          <p>
+            <strong>Recommended:</strong> Each handler should capture only its required services via
+            <code>Layer.effect</code> or dependency injection at the handler level, not at the group
+            level.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- RECOMMENDED TASKS -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="recommended-tasks">
+        <h2 id="recommended-tasks">Recommended Tasks (in order)</h2>
+
+        <div class="recommended">
+          <h3>
+            Task 1: Fix <code>onResubscribe</code> double-firing in <code>wsTransport.ts</code>
+          </h3>
+          <p>
+            <strong>Files:</strong>
+            <span class="file">packages/client-runtime/src/wsTransport.ts</span>
+          </p>
+          <p><strong>Impact:</strong> Critical bug causing state corruption on reconnect.</p>
+          <p>
+            <strong>Fix:</strong> Remove <code>onResubscribe</code> from the
+            <code>onStreamRequestStart</code> listener (line 150-152). The retry loop already
+            handles calling it.
+          </p>
+        </div>
+
+        <div class="recommended">
+          <h3>
+            Task 2: Fix <code>intentionalCloseDepth</code> underflow in <code>wsTransport.ts</code>
+          </h3>
+          <p>
+            <strong>Files:</strong>
+            <span class="file">packages/client-runtime/src/wsTransport.ts</span>
+          </p>
+          <p>
+            <strong>Impact:</strong> Critical race condition on concurrent disconnect/reconnect.
+          </p>
+          <p>
+            <strong>Fix:</strong> Replace the shared depth counter with per-session tracking using a
+            <code>Set&lt;number&gt;</code> (session IDs) or an <code>AtomicReference</code> with
+            compare-and-swap.
+          </p>
+        </div>
+
+        <div class="recommended">
+          <h3>Task 3: Enable logging in <code>Effect.ignoreCause({ log: false })</code></h3>
+          <p><strong>Files:</strong> <span class="file">apps/server/src/ws.ts:560</span></p>
+          <p><strong>Impact:</strong> Silent failures in setup script activity reporting.</p>
+          <p><strong>Fix:</strong> Change to <code>Effect.ignoreCause({ log: true })</code>.</p>
+        </div>
+
+        <div class="recommended">
+          <h3>Task 4: Audit all bare <code>Effect.ignore</code> usages across adapters</h3>
+          <p>
+            <strong>Files:</strong> <span class="file">apps/server/src/provider/Layers/*.ts</span>,
+            <span class="file">apps/server/src/textGeneration/CursorTextGeneration.ts</span>
+          </p>
+          <p><strong>Impact:</strong> Swallowed errors in critical provider lifecycle code.</p>
+          <p>
+            <strong>Fix:</strong> Replace bare <code>Effect.ignore()</code> with
+            <code>Effect.ignoreCause({ log: true })</code> in all adapter files.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- WHAT NOT TO TOUCH -->
+      <!-- ========================================================================= -->
+      <section aria-labelledby="dont-touch">
+        <h2 id="dont-touch">What Not to Touch</h2>
+
+        <ul>
+          <li>
+            <strong>Don't refactor ws.ts splitting yet</strong> — The file is 1578 lines and needs
+            splitting, but doing so in isolation before the RPC group migration (which is likely
+            planned given the RPC infrastructure) risks conflicts. Wait for the RPC framework to
+            stabilize.
+          </li>
+          <li>
+            <strong>Don't add auth to static file serving</strong> — The <code>GET *</code> route
+            intentionally lacks auth (it's a local dev tool). Adding it would break the dev workflow
+            where the Vite dev server proxies requests.
+          </li>
+          <li>
+            <strong>Don't rewrite the Zustand store</strong> — The TODO mentions a client-runtime
+            migration. Let that migration happen naturally rather than investing in the legacy
+            store.
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

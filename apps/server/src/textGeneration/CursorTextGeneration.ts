@@ -104,7 +104,7 @@ export const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(fu
 
       const promptResult = yield* Effect.gen(function* () {
         yield* runtime.start();
-        yield* Effect.ignore(runtime.setMode("ask"));
+        yield* Effect.ignoreCause({ log: true })(runtime.setMode("ask"));
         yield* applyCursorAcpModelSelection({
           runtime,
           model: modelSelection.model,

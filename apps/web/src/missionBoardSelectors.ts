@@ -1,3 +1,4 @@
+import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import type { AppState, EnvironmentState } from "./store";
 import type {
   MissionBoardAction,
@@ -9,6 +10,7 @@ import type {
   MissionManualColumnId,
   MissionMoveResult,
 } from "./missionBoardTypes";
+import type { MissionDraftMetadata } from "./missionComposerTypes";
 import type { SidebarThreadSummary } from "./types";
 import type { MissionReviewState, MissionReviewStatus } from "./reviewStateStore";
 import { selectProjectsAcrossEnvironments } from "./store";
@@ -398,11 +400,46 @@ export function getMissionAvailableActions(card: MissionBoardCard): MissionBoard
 function sortMissionsByRecentActivity(cards: MissionBoardCard[]): MissionBoardCard[] {
   return [...cards].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
+function buildDraftMissionCards(
+  recipeData?: Record<string, MissionDraftMetadata>,
+): MissionBoardCard[] {
+  if (!recipeData) return [];
+
+  const cards: MissionBoardCard[] = [];
+
+  for (const entry of Object.values(recipeData)) {
+    if (!entry.pendingPromotion) continue;
+
+    const card: MissionBoardCard = {
+      id: `draft:${entry.threadId}`,
+      threadId: entry.threadId,
+      environmentId: entry.environmentId,
+      projectId: entry.projectId,
+      title: entry.title,
+      columnId: "backlog",
+      statusLabel: "Draft",
+      lastActivityAt: entry.createdAt,
+      isActive: false,
+      needsReview: false,
+      draftId: entry.draftId,
+      availableActions: ["open"],
+    };
+
+    if (entry.description) {
+      card.preview = entry.description;
+    }
+
+    cards.push(card);
+  }
+
+  return cards;
+}
 
 export function selectMissionBoardCards(
   state: AppState,
   reviewStates?: Record<string, MissionReviewState>,
   manualStates?: Record<string, MissionBoardManualState>,
+  recipeData?: Record<string, MissionDraftMetadata>,
 ): MissionBoardCard[] {
   const projects = selectProjectsAcrossEnvironments(state);
   const projectNameById: Record<string, string> = {};
@@ -480,15 +517,18 @@ export function selectMissionBoardCards(
     }
   }
 
+  const draftCards = buildDraftMissionCards(recipeData);
+  cards.push(...draftCards);
+
   return cards;
 }
-
 export function selectMissionBoardColumns(
   state: AppState,
   reviewStates?: Record<string, MissionReviewState>,
   manualStates?: Record<string, MissionBoardManualState>,
+  recipeData?: Record<string, MissionDraftMetadata>,
 ): MissionBoardColumn[] {
-  const cards = selectMissionBoardCards(state, reviewStates, manualStates);
+  const cards = selectMissionBoardCards(state, reviewStates, manualStates, recipeData);
 
   return ALL_COLUMN_IDS.map((columnId) => {
     const meta = getColumnMeta(columnId);
@@ -511,8 +551,9 @@ export function selectMissionBoardSummary(
   state: AppState,
   reviewStates?: Record<string, MissionReviewState>,
   manualStates?: Record<string, MissionBoardManualState>,
+  recipeData?: Record<string, MissionDraftMetadata>,
 ): MissionBoardSummary {
-  const cards = selectMissionBoardCards(state, reviewStates, manualStates);
+  const cards = selectMissionBoardCards(state, reviewStates, manualStates, recipeData);
   const summary: MissionBoardSummary = {
     total: cards.length,
     running: 0,

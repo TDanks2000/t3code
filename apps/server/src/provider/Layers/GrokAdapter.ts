@@ -321,7 +321,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
-        yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
+        yield* Effect.ignoreCause({ log: true })(Scope.close(ctx.scope, Exit.void));
         sessions.delete(ctx.threadId);
         yield* offerRuntimeEvent({
           type: "session.exited",
@@ -870,7 +870,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
         const ctx = yield* requireSession(threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
-        yield* Effect.ignore(
+        yield* Effect.ignoreCause({ log: true })(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
               mapAcpToAdapterError(PROVIDER, threadId, "session/cancel", error),
@@ -960,7 +960,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
       Effect.forEach(Array.from(sessions.values()), stopSessionInternal, { discard: true });
 
     yield* Effect.addFinalizer(() =>
-      Effect.ignore(stopAll()).pipe(
+      Effect.ignoreCause({ log: true })(stopAll()).pipe(
         Effect.tap(() => PubSub.shutdown(runtimeEventPubSub)),
         Effect.tap(() => managedNativeEventLogger?.close() ?? Effect.void),
       ),

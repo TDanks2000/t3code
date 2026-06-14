@@ -67,7 +67,7 @@ export class WsTransport {
   private readonly options: WsTransportOptions | undefined;
   private disposed = false;
   private hasReportedTransportDisconnect = false;
-  private intentionalCloseDepth = 0;
+  private intentionalCloseSessionIds = new Set<number>();
   private nextSessionId = 0;
   private activeSessionId = 0;
   private lastHeartbeatPongAt: number | null = null;
@@ -145,12 +145,6 @@ export class WsTransport {
         (options?.tag !== undefined && info.tag !== options.tag)
       ) {
         return;
-      }
-
-      try {
-        options?.onResubscribe?.();
-      } catch {
-        // Ignore reconnect hook failures so the stream can recover.
       }
     };
     this.streamRequestStartListeners.add(onStreamRequestStart);
@@ -260,9 +254,9 @@ export class WsTransport {
   }
 
   private closeSession(session: TransportSession) {
-    this.intentionalCloseDepth += 1;
+    this.intentionalCloseSessionIds.add(this.activeSessionId);
     return session.runtime.runPromise(Scope.close(session.clientScope, Exit.void)).finally(() => {
-      this.intentionalCloseDepth = Math.max(0, this.intentionalCloseDepth - 1);
+      this.intentionalCloseSessionIds.delete(this.activeSessionId);
       session.runtime.dispose();
     });
   }
@@ -281,7 +275,7 @@ export class WsTransport {
         (lifecycleHandlers?.isActive?.() ?? true),
       isCloseIntentional: () =>
         this.disposed ||
-        this.intentionalCloseDepth > 0 ||
+        this.intentionalCloseSessionIds.has(this.activeSessionId) ||
         lifecycleHandlers?.isCloseIntentional?.() === true,
       onHeartbeatPong: () => {
         this.lastHeartbeatPongAt = performance.now();

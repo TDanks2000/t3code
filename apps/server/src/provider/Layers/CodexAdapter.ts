@@ -1448,7 +1448,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           ),
           Effect.onError(() =>
             runtime.close.pipe(
-              Effect.andThen(Effect.ignore(Scope.close(sessionScope, Exit.void))),
+              Effect.andThen(
+                Effect.ignoreCause({ log: true })(Scope.close(sessionScope, Exit.void)),
+              ),
               Effect.andThen(Fiber.interrupt(eventFiber)),
               Effect.ignore,
             ),
@@ -1634,7 +1636,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     session.stopped = true;
     sessions.delete(session.threadId);
     yield* session.runtime.close.pipe(Effect.ignore);
-    yield* Effect.ignore(Scope.close(session.scope, Exit.void));
+    yield* Effect.ignoreCause({ log: true })(Scope.close(session.scope, Exit.void));
     yield* Fiber.interrupt(session.eventFiber).pipe(Effect.ignore);
   });
 

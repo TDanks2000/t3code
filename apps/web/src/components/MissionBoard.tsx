@@ -61,6 +61,8 @@ import {
   setManualColumnForThread,
   setManualSortOrderForThread,
 } from "../missionBoardManualStateStore";
+import { useMissionRecipeStore } from "../missionRecipeStore";
+import { MissionComposer } from "./MissionComposer";
 
 type FilterMode = "all" | "active" | "needs_human" | "failed" | "needs_review";
 const FILTER_OPTIONS: { id: FilterMode; label: string }[] = [
@@ -227,11 +229,18 @@ function MissionCard({
   const navigate = useNavigate();
 
   const handleOpen = useCallback(() => {
-    navigate({
-      to: "/$environmentId/$threadId",
-      params: { environmentId: card.environmentId, threadId: card.threadId },
-    });
-  }, [navigate, card.environmentId, card.threadId]);
+    if (card.draftId) {
+      navigate({
+        to: "/draft/$draftId",
+        params: { draftId: card.draftId },
+      });
+    } else {
+      navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId: card.environmentId, threadId: card.threadId },
+      });
+    }
+  }, [navigate, card.draftId, card.environmentId, card.threadId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -248,10 +257,17 @@ function MissionCard({
       e.stopPropagation();
 
       if (action === "open" || action === "continue" || action === "respond") {
-        navigate({
-          to: "/$environmentId/$threadId",
-          params: { environmentId: card.environmentId, threadId: card.threadId },
-        });
+        if (card.draftId) {
+          navigate({
+            to: "/draft/$draftId",
+            params: { draftId: card.draftId },
+          });
+        } else {
+          navigate({
+            to: "/$environmentId/$threadId",
+            params: { environmentId: card.environmentId, threadId: card.threadId },
+          });
+        }
         return;
       }
 
@@ -588,14 +604,16 @@ function FilterBar({
 export function MissionBoard() {
   const [filter, setFilter] = useState<FilterMode>("all");
   const [activeDragCard, setActiveDragCard] = useState<MissionBoardCard | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const state = useStore();
   const reviewStates = useReviewStateStore((s) => s.reviewStates);
   const manualStates = useMissionBoardManualStateStore((s) => s.manualStates);
+  const recipeData = useMissionRecipeStore((s) => s.recipeData);
   const moveMissionCard = useMissionBoardManualStateStore((s) => s.moveMissionCard);
   const resetMissionBoardOrder = useMissionBoardManualStateStore((s) => s.resetMissionBoardOrder);
   const columns = useMemo(
-    () => selectMissionBoardColumns(state, reviewStates, manualStates),
-    [state, reviewStates, manualStates],
+    () => selectMissionBoardColumns(state, reviewStates, manualStates, recipeData),
+    [state, reviewStates, manualStates, recipeData],
   );
   const { handleNewThread, defaultProjectRef } = useHandleNewThread();
   const { archiveThread } = useThreadActions();
@@ -610,11 +628,9 @@ export function MissionBoard() {
 
   const totalCards = columns.reduce((sum, col) => sum + col.cards.length, 0);
 
-  const handleNewMission = useCallback(() => {
-    if (defaultProjectRef) {
-      handleNewThread(defaultProjectRef);
-    }
-  }, [handleNewThread, defaultProjectRef]);
+  const handleOpenComposer = useCallback(() => {
+    setComposerOpen(true);
+  }, []);
 
   const handleArchive = useCallback(
     (card: MissionBoardCard) => {
@@ -774,7 +790,7 @@ export function MissionBoard() {
     return (
       <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-          <header className="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
+          <header className="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-5 sm:py-3 wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
             <SidebarTrigger className="size-7 shrink-0 md:hidden" />
             <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
               Mission Board
@@ -789,7 +805,7 @@ export function MissionBoard() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-        <header className="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-5 sm:py-3">
+        <header className="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-5 sm:py-3 wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
           <SidebarTrigger className="size-7 shrink-0 md:hidden" />
           <LayoutDashboardIcon className="size-4 text-muted-foreground/60" />
           <span className="text-sm font-medium text-foreground/90">Mission Board</span>
@@ -810,7 +826,7 @@ export function MissionBoard() {
                 Reset order
               </button>
             )}
-            <Button size="sm" onClick={handleNewMission}>
+            <Button size="sm" onClick={handleOpenComposer}>
               <PlusIcon className="size-4" />
               <span className="hidden sm:inline">New mission</span>
             </Button>
@@ -822,6 +838,12 @@ export function MissionBoard() {
             Drag idle missions to organize your board. Live agent states move automatically.
           </span>
         </div>
+
+        <MissionComposer
+          open={composerOpen}
+          onOpenChange={setComposerOpen}
+          projectRef={defaultProjectRef}
+        />
 
         <ScrollArea className="flex-1">
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

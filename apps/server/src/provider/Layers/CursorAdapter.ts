@@ -464,7 +464,7 @@ export function makeCursorAdapter(
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
-        yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
+        yield* Effect.ignoreCause({ log: true })(Scope.close(ctx.scope, Exit.void));
         sessions.delete(ctx.threadId);
         yield* offerRuntimeEvent({
           type: "session.exited",
@@ -1040,7 +1040,7 @@ export function makeCursorAdapter(
         const ctx = yield* requireSession(threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
-        yield* Effect.ignore(
+        yield* Effect.ignoreCause({ log: true })(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
               mapAcpToAdapterError(PROVIDER, threadId, "session/cancel", error),

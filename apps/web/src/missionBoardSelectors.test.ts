@@ -21,7 +21,11 @@ import {
   selectMissionBoardColumns,
   selectMissionBoardSummary,
 } from "./missionBoardSelectors";
-import type { MissionBoardCard, MissionBoardColumnId, MissionBoardManualState } from "./missionBoardTypes";
+import type {
+  MissionBoardCard,
+  MissionBoardColumnId,
+  MissionBoardManualState,
+} from "./missionBoardTypes";
 import type { AppState, EnvironmentState } from "./store";
 import type { MissionReviewState } from "./reviewStateStore";
 import type { SidebarThreadSummary } from "./types";

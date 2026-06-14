@@ -557,7 +557,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
               },
               tone: "error",
             }).pipe(
-              Effect.ignoreCause({ log: false }),
+              Effect.ignoreCause({ log: true }),
               Effect.flatMap(() =>
                 Effect.logWarning("bootstrap turn start failed to launch setup script", {
                   threadId: command.threadId,

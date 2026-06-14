@@ -96,6 +96,16 @@
   animation-duration: 0s !important;
 }
 
+/* Subtle glass-highlight shine for card surfaces */
+@keyframes shine {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;
@@ -290,6 +300,20 @@ label:has(> select#reasoning-effort) select {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Smooth scroll for tool call expanded content */
+.tool-call-expand-content {
+  transition:
+    max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease-in-out;
+}
+
+/* Glow effect for active/focused tool call rows */
+.tool-call-row-glow:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--ring),
+    0 0 12px -4px color-mix(in srgb, var(--ring) 40%, transparent);
 }
 
 .chat-markdown > :first-child {

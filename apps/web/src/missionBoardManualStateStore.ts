@@ -118,6 +118,12 @@ export function setManualSortOrderForThread(
   return setManualStateForThread(threadId, state as unknown as MissionBoardManualState);
 }
 
+export interface SortOrderUpdate {
+  threadId: ThreadId;
+  sortOrder: number;
+  manualColumnId?: MissionManualColumnId;
+}
+
 interface MissionBoardManualStateStore {
   manualStates: Record<ThreadId, MissionBoardManualState>;
   moveMissionCard: (params: {
@@ -126,6 +132,7 @@ interface MissionBoardManualStateStore {
     toColumnId: MissionManualColumnId;
     targetIndex: number;
   }) => void;
+  setManualSortOrders: (updates: SortOrderUpdate[]) => void;
   resetMissionBoardOrder: (threadId?: ThreadId) => void;
 }
 
@@ -141,6 +148,27 @@ export const useMissionBoardManualStateStore = create<MissionBoardManualStateSto
         updatedAt: now,
       };
       return { manualStates: setManualStateForThread(threadId, state) };
+    }),
+  setManualSortOrders: (updates) =>
+    set(() => {
+      const next = { ..._currentManualStates };
+      const now = new Date().toISOString();
+      for (const { threadId, sortOrder, manualColumnId } of updates) {
+        const existing = next[threadId];
+        const mergedColumnId = manualColumnId ?? existing?.manualColumnId;
+        const state: MissionBoardManualState = {
+          threadId,
+          sortOrder,
+          updatedAt: now,
+        };
+        if (mergedColumnId !== undefined) {
+          state.manualColumnId = mergedColumnId;
+        }
+        next[threadId] = state;
+      }
+      _currentManualStates = next;
+      writePersistedManualStates(next);
+      return { manualStates: next };
     }),
   resetMissionBoardOrder: (threadId?: ThreadId) =>
     set(() => {

@@ -428,7 +428,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="group flex flex-col items-end gap-1">
-      <div className="relative max-w-[80%] rounded-2xl border border-border bg-secondary p-3">
+      <div className="relative max-w-[80%] rounded-2xl border border-border/70 bg-secondary/90 p-3 shadow-xs">
         {userImages.length > 0 && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
@@ -521,17 +521,19 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
   const Icon = row.expanded ? ChevronDownIcon : ChevronRightIcon;
 
   return (
-    <div className="border-b border-border/60 pb-2 pt-1">
+    <div className="flex items-center gap-3 border-b border-border/50 pb-2 pt-1">
+      <div className="h-px flex-1 bg-linear-to-r from-transparent via-border/40 to-transparent" />
       <button
         type="button"
         aria-expanded={row.expanded}
         data-scroll-anchor-ignore
         onClick={() => ctx.onToggleTurnFold(row.turnId)}
-        className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-0.5 text-[11px] text-muted-foreground/80 tabular-nums transition-colors hover:bg-muted/70 hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
         <span>{row.label}</span>
-        <Icon className="size-3.5" />
+        <Icon className="size-3" />
       </button>
+      <div className="h-px flex-1 bg-linear-to-r from-transparent via-border/40 to-transparent" />
     </div>
   );
 }
@@ -542,7 +544,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
 
   return (
     <>
-      <div className="relative min-w-0 px-1 py-0.5">
+      <div className="relative min-w-0 rounded-xl border-l-2 border-primary/15 bg-card/15 px-3 py-1.5">
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -618,14 +620,14 @@ function ProposedPlanTimelineRow({
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
   return (
-    <div className="py-0.5 pl-1.5">
-      <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 tabular-nums">
-        <span className="inline-flex items-center gap-[3px]">
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
+    <div className="py-1 pl-1.5">
+      <div className="flex items-center gap-2.5 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2 text-[12px] text-primary/70 tabular-nums">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" />
+          <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:200ms]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse [animation-delay:400ms]" />
         </span>
-        <span>
+        <span className="font-medium">
           {row.createdAt ? (
             <>
               Working for <WorkingTimer createdAt={row.createdAt} />
@@ -734,13 +736,21 @@ const WorkGroupSection = memo(function WorkGroupSection({
   if (nonEmptyEntries.length === 0) return null;
 
   return (
-    <section ref={sectionRef} className="-mx-1 space-y-0.5 px-1 py-0.5" aria-label={groupLabel}>
-      {!onlyToolEntries && (
-        <p className="px-0.5 pb-0.5 font-medium text-[11px] text-muted-foreground/65">
+    <section
+      ref={sectionRef}
+      className="-mx-1 rounded-lg border border-border/30 bg-card/20 px-2 py-1.5"
+      aria-label={groupLabel}
+    >
+      {!onlyToolEntries ? (
+        <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/50">
           {groupLabel}
         </p>
+      ) : (
+        <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/50">
+          <span>{groupLabel}</span>
+        </p>
       )}
-      <div className="space-y-px">
+      <div className="space-y-1">
         {visibleEntries.map((workEntry) => (
           <SimpleWorkEntryRow
             key={workEntry.id}
@@ -752,20 +762,20 @@ const WorkGroupSection = memo(function WorkGroupSection({
       {hasOverflow && (
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-[12px] leading-5 transition-colors duration-150 hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+          className="mt-1.5 flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[12px] leading-5 transition-colors duration-150 hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
           onClick={toggleExpanded}
         >
-          <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/65">
+          <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground/55">
             {isExpanded ? (
-              <ChevronUpIcon className="size-3.5 shrink-0 opacity-70" />
+              <ChevronUpIcon className="size-3.5 shrink-0" />
             ) : (
-              <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
+              <ChevronDownIcon className="size-3.5 shrink-0" />
             )}
           </span>
           {isExpanded ? (
-            <span className="font-medium text-foreground/82">Show fewer tool calls</span>
+            <span className="font-medium text-foreground/80">Show fewer tool calls</span>
           ) : (
-            <span className="font-medium text-foreground/82">
+            <span className="font-medium text-foreground/80">
               +{hiddenCount} previous tool {hiddenCount === 1 ? "call" : "calls"}
             </span>
           )}
@@ -1396,6 +1406,21 @@ function capitalizePhrase(value: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }
 
+const toolIconColorMap: Record<WorkEntryIconName, { container: string; icon: string }> = {
+  terminal: { container: "bg-sky-500/12", icon: "text-sky-500" },
+  "square-pen": { container: "bg-emerald-500/12", icon: "text-emerald-500" },
+  wrench: { container: "bg-violet-500/12", icon: "text-violet-500" },
+  hammer: { container: "bg-amber-500/12", icon: "text-amber-500" },
+  globe: { container: "bg-cyan-500/12", icon: "text-cyan-500" },
+  eye: { container: "bg-blue-500/12", icon: "text-blue-500" },
+  "message-circle": { container: "bg-pink-500/12", icon: "text-pink-500" },
+  bot: { container: "bg-neutral-500/12", icon: "text-neutral-500" },
+  zap: { container: "bg-yellow-500/12", icon: "text-yellow-500" },
+  check: { container: "bg-emerald-500/12", icon: "text-emerald-500" },
+  "circle-alert": { container: "bg-red-500/12", icon: "text-red-500" },
+  x: { container: "bg-red-500/12", icon: "text-red-500" },
+};
+
 function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   if (!workEntry.toolTitle) {
     return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
@@ -1465,32 +1490,54 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       }
     : {};
 
+  const iconColors =
+    !showWarningIndicator && !showDestructiveRowStyle
+      ? (toolIconColorMap[entryIconName] ?? toolIconColorMap.zap)
+      : null;
+
+  // Smooth expand: always render the body but transition its height
+  const hasExpandableBody = canExpand && expandedBody;
+
   return (
     <div
       className={cn(
-        "flex flex-col rounded-md px-0.5 py-0.5 transition-colors",
-        canExpand &&
-          "cursor-pointer hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
+        "relative flex flex-col rounded-lg border px-2.5 py-1.5 transition-all duration-200",
+        expanded && hasExpandableBody
+          ? "border-border/40 bg-accent/10 shadow-xs"
+          : "border-transparent hover:bg-accent/10",
+        canExpand
+          ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+          : null,
+        showWarningIndicator || showDestructiveRowStyle ? "hover:bg-red-500/5" : null,
       )}
       {...rowToggleProps}
     >
-      <div className="flex select-none items-center gap-1.5 transition-[opacity,translate] duration-200">
-        <span className={iconWrapperClass}>
+      <div className="flex select-none items-center gap-2.5">
+        <span
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
+            iconColors?.container ?? iconWrapperClass,
+          )}
+        >
           <WorkEntryIconSvg
             name={entryIconName}
-            className="block size-3.5 shrink-0 stroke-[1.8] opacity-80"
+            className={cn("block size-4 shrink-0", iconColors?.icon ?? "opacity-80")}
           />
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="flex min-w-0 w-full items-baseline gap-1.5 text-[12px] leading-5">
-              <span className={cn("min-w-0 shrink truncate", headingClass)}>{heading}</span>
+            <p className="flex min-w-0 w-full items-baseline gap-2 text-[13px] leading-5">
+              <span className={cn("min-w-0 shrink truncate font-semibold", headingClass)}>
+                {heading}
+              </span>
               {preview && (
-                <span className="min-w-0 flex-1 truncate text-muted-foreground/55">{preview}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground/55">
+                  {preview}
+                </span>
               )}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-px text-muted-foreground/55">
+          <div className="flex shrink-0 items-center gap-0.5">
             <span
               className="flex size-4 shrink-0 items-center justify-center"
               aria-hidden={!canExpand}
@@ -1498,7 +1545,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               {canExpand ? (
                 <ChevronDownIcon
                   className={cn(
-                    "size-3 shrink-0 opacity-70 transition-transform duration-200",
+                    "size-3.5 shrink-0 text-muted-foreground/45 transition-transform duration-300",
                     expanded && "rotate-180",
                   )}
                   aria-hidden
@@ -1516,7 +1563,9 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                       />
                     }
                   >
-                    <XIcon className="block size-3 shrink-0 text-destructive" aria-hidden />
+                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-red-500/15">
+                      <XIcon className="block size-3 shrink-0 text-destructive" aria-hidden />
+                    </span>
                   </TooltipTrigger>
                   <TooltipPopup>Failed</TooltipPopup>
                 </Tooltip>
@@ -1525,12 +1574,8 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                   <TooltipTrigger
                     render={<span className="flex size-4 items-center justify-center" />}
                   >
-                    <span className="inline-flex size-4 items-center justify-center">
-                      <CheckIcon
-                        className="block size-3 shrink-0 stroke-current"
-                        stroke="currentColor"
-                        aria-hidden
-                      />
+                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-emerald-500/15">
+                      <CheckIcon className="block size-3 shrink-0 text-emerald-500" aria-hidden />
                     </span>
                   </TooltipTrigger>
                   <TooltipPopup>Completed</TooltipPopup>
@@ -1540,7 +1585,12 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                   <TooltipTrigger
                     render={<span className="flex size-4 items-center justify-center" />}
                   >
-                    <MinusIcon className="block size-3 shrink-0 opacity-70" aria-hidden />
+                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-neutral-500/10">
+                      <MinusIcon
+                        className="block size-3 shrink-0 text-muted-foreground/50"
+                        aria-hidden
+                      />
+                    </span>
                   </TooltipTrigger>
                   <TooltipPopup>Empty</TooltipPopup>
                 </Tooltip>
@@ -1549,17 +1599,20 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           </div>
         </div>
       </div>
-      {expanded && canExpand && expandedBody ? (
-        <div
-          className="mt-1 ms-7 cursor-default border-s border-border/45 ps-3 pt-0.5"
-          onClick={stopRowToggle}
-          onPointerDown={stopRowToggle}
-        >
-          <pre className="max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-300 ease-in-out",
+          expanded && hasExpandableBody ? "max-h-96 opacity-100 mt-1.5" : "max-h-0 opacity-0 mt-0",
+        )}
+        onClick={stopRowToggle}
+        onPointerDown={stopRowToggle}
+      >
+        <div className="ms-9 cursor-default border-s-2 border-border/25 ps-3 pt-0.5">
+          <pre className="max-h-64 cursor-text overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted-foreground/80 select-text">
             {expandedBody}
           </pre>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 });

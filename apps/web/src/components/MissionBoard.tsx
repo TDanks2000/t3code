@@ -27,6 +27,8 @@ import {
   useDroppable,
   DragOverlay,
 } from "@dnd-kit/core";
+
+let _activeDragId: string | null = null;
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -56,10 +58,7 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { useReviewStateStore, getAllReviewStates } from "../reviewStateStore";
 import {
   useMissionBoardManualStateStore,
-  getAllManualStates,
-  getMissionBoardManualState,
-  setManualColumnForThread,
-  setManualSortOrderForThread,
+  type SortOrderUpdate,
 } from "../missionBoardManualStateStore";
 import { useMissionRecipeStore } from "../missionRecipeStore";
 import { MissionComposer } from "./MissionComposer";
@@ -217,18 +216,17 @@ function MissionCard({
   onMarkReviewed,
   filter,
   isDragOverlay,
-  dragHandleProps,
 }: {
   card: MissionBoardCard;
   onArchive?: ((card: MissionBoardCard) => void) | undefined;
   onMarkReviewed?: ((card: MissionBoardCard) => void) | undefined;
   filter: FilterMode;
   isDragOverlay?: boolean;
-  dragHandleProps?: Record<string, unknown> | undefined;
 }) {
   const navigate = useNavigate();
 
   const handleOpen = useCallback(() => {
+    if (_activeDragId !== null) return;
     if (card.draftId) {
       navigate({
         to: "/draft/$draftId",
@@ -328,6 +326,7 @@ function MissionCard({
           <span
             className="inline-flex cursor-grab active:cursor-grabbing rounded-sm p-0.5 text-muted-foreground/30 transition-opacity hover:text-muted-foreground/60 group-hover/card:opacity-50"
             aria-label="Drag to reorder"
+            onClick={(e) => e.stopPropagation()}
           >
             <GripVerticalIcon className="size-3.5" />
           </span>
@@ -403,26 +402,25 @@ function SortableMissionCard({
   onMarkReviewed?: ((card: MissionBoardCard) => void) | undefined;
   filter: FilterMode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const sortable = useSortable({
     id: card.id,
     data: { type: "card", card, columnId: card.columnId },
     disabled: !isMissionManualColumn(card.columnId),
   });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
+    transform: CSS.Translate.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
+    <div ref={sortable.setNodeRef} style={style} {...sortable.attributes} {...sortable.listeners}>
       <MissionCard
         card={card}
         onArchive={onArchive}
         onMarkReviewed={onMarkReviewed}
         filter={filter}
-        dragHandleProps={listeners}
       />
     </div>
   );
@@ -609,7 +607,7 @@ export function MissionBoard() {
   const reviewStates = useReviewStateStore((s) => s.reviewStates);
   const manualStates = useMissionBoardManualStateStore((s) => s.manualStates);
   const recipeData = useMissionRecipeStore((s) => s.recipeData);
-  const moveMissionCard = useMissionBoardManualStateStore((s) => s.moveMissionCard);
+  const setManualSortOrders = useMissionBoardManualStateStore((s) => s.setManualSortOrders);
   const resetMissionBoardOrder = useMissionBoardManualStateStore((s) => s.resetMissionBoardOrder);
   const columns = useMemo(
     () => selectMissionBoardColumns(state, reviewStates, manualStates, recipeData),
@@ -677,10 +675,16 @@ export function MissionBoard() {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    _activeDragId = String(event.active.id);
     const data = event.active.data.current;
     if (data?.type === "card" && data.card) {
       setActiveDragCard(data.card as MissionBoardCard);
     }
+  }, []);
+
+  const handleDragOver = useCallback((_event: DragOverEvent) => {
+    // DroppableColumnWrapper handles visual feedback via useDroppable isOver.
+    // Full cross-column SortableContext transition is handled in handleDragEnd.
   }, []);
 
   const handleDragEnd = useCallback(
@@ -688,13 +692,28 @@ export function MissionBoard() {
       setActiveDragCard(null);
 
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        setTimeout(() => {
+          _activeDragId = null;
+        }, 0);
+        return;
+      }
 
       const activeData = active.data.current;
-      if (!activeData || activeData.type !== "card") return;
+      if (!activeData || activeData.type !== "card") {
+        setTimeout(() => {
+          _activeDragId = null;
+        }, 0);
+        return;
+      }
 
       const activeCard = activeData.card as MissionBoardCard;
-      if (!activeCard) return;
+      if (!activeCard) {
+        setTimeout(() => {
+          _activeDragId = null;
+        }, 0);
+        return;
+      }
 
       const fromColumnId = activeCard.columnId;
 
@@ -716,7 +735,12 @@ export function MissionBoard() {
         targetIndex = 0;
       }
 
-      if (!toColumnId || !fromColumnId) return;
+      if (!toColumnId || !fromColumnId) {
+        setTimeout(() => {
+          _activeDragId = null;
+        }, 0);
+        return;
+      }
 
       const moveResult = getMissionMoveResult({
         card: activeCard,
@@ -732,6 +756,9 @@ export function MissionBoard() {
             description: moveResult.reason,
           }),
         );
+        setTimeout(() => {
+          _activeDragId = null;
+        }, 0);
         return;
       }
 
@@ -739,34 +766,66 @@ export function MissionBoard() {
         const targetColumn = columns.find((c) => c.id === toColumnId);
         const targetCards = targetColumn?.cards ?? [];
         const currentIndex = targetCards.findIndex((c) => c.id === activeCard.id);
-        if (currentIndex < 0) return;
+        if (currentIndex < 0) {
+          setTimeout(() => {
+            _activeDragId = null;
+          }, 0);
+          return;
+        }
 
         if (currentIndex !== targetIndex) {
           const reordered = targetCards.filter((c) => c.id !== activeCard.id);
           reordered.splice(targetIndex, 0, activeCard);
-          reordered.forEach((c, i) => {
-            setManualSortOrderForThread(c.threadId, i);
-          });
+          const updates: SortOrderUpdate[] = reordered.map((c, i) => ({
+            threadId: c.threadId,
+            sortOrder: i,
+          }));
+          setManualSortOrders(updates);
         }
       } else if (isMissionManualColumn(fromColumnId) && isMissionManualColumn(toColumnId)) {
         const targetColumn = columns.find((c) => c.id === toColumnId);
+        const sourceColumn = columns.find((c) => c.id === fromColumnId);
         const targetCards = targetColumn?.cards ?? [];
+        const sourceCards = sourceColumn?.cards ?? [];
 
+        const updates: SortOrderUpdate[] = [];
+
+        // Move the dragged card to the target column
+        updates.push({
+          threadId: activeCard.threadId,
+          sortOrder: targetIndex,
+          manualColumnId: toColumnId,
+        });
+
+        // Re-index remaining cards in the target column
         const reordered = [...targetCards];
         reordered.splice(targetIndex, 0, activeCard);
-
-        const now = new Date().toISOString();
-        setManualColumnForThread(activeCard.threadId, toColumnId);
-        if (targetColumn) {
-          setManualSortOrderForThread(activeCard.threadId, targetIndex);
-        }
-
         reordered.forEach((c, i) => {
           if (c.id !== activeCard.id) {
-            setManualSortOrderForThread(c.threadId, i);
+            updates.push({
+              threadId: c.threadId,
+              sortOrder: i,
+              manualColumnId: toColumnId,
+            });
           }
         });
+
+        // Re-index remaining cards in the source column
+        const remainingSource = sourceCards.filter((c) => c.id !== activeCard.id);
+        remainingSource.forEach((c, i) => {
+          updates.push({
+            threadId: c.threadId,
+            sortOrder: i,
+            manualColumnId: fromColumnId,
+          });
+        });
+
+        setManualSortOrders(updates);
       }
+
+      setTimeout(() => {
+        _activeDragId = null;
+      }, 0);
     },
     [columns],
   );
@@ -846,7 +905,12 @@ export function MissionBoard() {
         />
 
         <ScrollArea className="flex-1">
-          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
             <div className="flex h-full gap-3 p-4 sm:p-5">
               {COLUMN_ORDER.map((columnId) => {
                 const column = columns.find((c) => c.id === columnId);

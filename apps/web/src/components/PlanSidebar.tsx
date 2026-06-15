@@ -29,24 +29,27 @@ import { readEnvironmentApi } from "~/environmentApi";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 
-function stepStatusIcon(status: string): React.ReactNode {
+function stepStatusIcon(status: string, isActive: boolean): React.ReactNode {
   if (status === "completed") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success/10 text-success-foreground">
-        <CheckIcon className="size-3" />
+      <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+        <CheckIcon className="size-2.5" />
       </span>
     );
   }
   if (status === "inProgress") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <LoaderIcon className="size-3 animate-spin" />
+      <span className="relative flex size-4 shrink-0 items-center justify-center">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/30" />
+        <span className="relative inline-flex size-4 items-center justify-center rounded-full bg-primary/15 text-primary">
+          <LoaderIcon className="size-2.5 animate-spin" />
+        </span>
       </span>
     );
   }
   return (
-    <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted/30">
-      <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+    <span className="flex size-4 shrink-0 items-center justify-center rounded-full border border-border/50 bg-muted/20">
+      <span className="size-1.5 rounded-full bg-muted-foreground/20" />
     </span>
   );
 }
@@ -136,7 +139,7 @@ const PlanSidebar = memo(function PlanSidebar({
       )}
     >
       {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-2">
           <Badge
             variant="info"
@@ -146,12 +149,12 @@ const PlanSidebar = memo(function PlanSidebar({
             {label}
           </Badge>
           {activePlan ? (
-            <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+            <span className="text-[10px] text-muted-foreground/50 tabular-nums">
               {formatTimestamp(activePlan.createdAt, timestampFormat)}
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {planMarkdown ? (
             <Menu>
               <MenuTrigger
@@ -164,7 +167,7 @@ const PlanSidebar = memo(function PlanSidebar({
                   />
                 }
               >
-                <EllipsisIcon className="size-3.5" />
+                <EllipsisIcon className="size-3" />
               </MenuTrigger>
               <MenuPopup align="end">
                 <MenuItem onClick={handleCopyPlan}>
@@ -187,7 +190,7 @@ const PlanSidebar = memo(function PlanSidebar({
             aria-label={`Close ${label.toLowerCase()} sidebar`}
             className="text-muted-foreground/50 hover:text-foreground/70"
           >
-            <PanelRightCloseIcon className="size-3.5" />
+            <PanelRightCloseIcon className="size-3" />
           </Button>
         </div>
       </div>
@@ -197,35 +200,52 @@ const PlanSidebar = memo(function PlanSidebar({
         <div className="p-3 space-y-4">
           {/* Explanation */}
           {activePlan?.explanation ? (
-            <p className="text-[13px] leading-relaxed text-muted-foreground/80">
-              {activePlan.explanation}
-            </p>
+            <div className="rounded-md border border-border/30 bg-card/40 px-2.5 py-2">
+              <p className="text-[12px] leading-relaxed text-muted-foreground/75">
+                {activePlan.explanation}
+              </p>
+            </div>
           ) : null}
 
           {/* Plan Steps */}
           {activePlan && activePlan.steps.length > 0 ? (
-            <div className="space-y-1">
-              <p className="mb-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
-                Steps
-              </p>
+            <div className="space-y-0.5">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+                  Steps
+                </p>
+                <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                  {activePlan.steps.filter((s) => s.status === "completed").length}/
+                  {activePlan.steps.length}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary/60 transition-all duration-500"
+                  style={{
+                    width: `${(activePlan.steps.filter((s) => s.status === "completed").length / activePlan.steps.length) * 100}%`,
+                  }}
+                />
+              </div>
               {activePlan.steps.map((step) => (
                 <div
                   key={`${step.status}:${step.step}`}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200",
-                    step.status === "inProgress" && "bg-blue-500/5",
-                    step.status === "completed" && "bg-emerald-500/5",
+                    "flex items-center gap-2 rounded-md px-2 py-1 transition-colors duration-200",
+                    step.status === "inProgress" && "bg-primary/[0.06] ring-1 ring-primary/20",
+                    step.status === "completed" && "bg-emerald-500/[0.03]",
                   )}
                 >
-                  {stepStatusIcon(step.status)}
+                  {stepStatusIcon(step.status, step.status === "inProgress")}
                   <p
                     className={cn(
-                      "text-[13px] leading-snug",
+                      "text-[12px] leading-snug",
                       step.status === "completed"
-                        ? "text-muted-foreground/50 line-through decoration-muted-foreground/20"
+                        ? "text-muted-foreground/45 line-through decoration-muted-foreground/15"
                         : step.status === "inProgress"
-                          ? "text-foreground/90"
-                          : "text-muted-foreground/70",
+                          ? "font-medium text-foreground/90"
+                          : "text-muted-foreground/60",
                     )}
                   >
                     {step.step}
@@ -266,9 +286,9 @@ const PlanSidebar = memo(function PlanSidebar({
 
           {/* Empty state */}
           {!activePlan && !planMarkdown ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-[13px] text-muted-foreground/40">No active plan yet.</p>
-              <p className="mt-1 text-[11px] text-muted-foreground/30">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <p className="text-[12px] text-muted-foreground/35">No active plan yet.</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/25">
                 Plans will appear here when generated.
               </p>
             </div>

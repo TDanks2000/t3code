@@ -77,6 +77,12 @@ export class WsTransport {
   private reconnectChain: Promise<void> = Promise.resolve();
   private session: TransportSession;
 
+  private consecutiveSubscriptionFailures = 0;
+  private lastSubscriptionFailureAt = 0;
+  private readonly MAX_CONSECUTIVE_SUBSCRIPTION_FAILURES = 3;
+  private readonly SUBSCRIPTION_FAILURE_WINDOW_MS = 30_000;
+  private subscriptionFailureEscalating = false;
+
   constructor(
     url: WsRpcProtocolSocketUrlProvider,
     lifecycleHandlers?: WsProtocolLifecycleHandlers,
@@ -200,6 +206,39 @@ export class WsTransport {
             });
           }
           this.hasReportedTransportDisconnect = true;
+
+          const now = performance.now();
+          if (now - this.lastSubscriptionFailureAt > this.SUBSCRIPTION_FAILURE_WINDOW_MS) {
+            this.consecutiveSubscriptionFailures = 0;
+          }
+          this.lastSubscriptionFailureAt = now;
+          this.consecutiveSubscriptionFailures++;
+
+          if (
+            this.consecutiveSubscriptionFailures >= this.MAX_CONSECUTIVE_SUBSCRIPTION_FAILURES &&
+            !this.subscriptionFailureEscalating
+          ) {
+            this.subscriptionFailureEscalating = true;
+            this.logWarning(
+              `Escalating to full reconnect after ${this.consecutiveSubscriptionFailures} consecutive subscription failures`,
+              { error: formattedError },
+            );
+            // Await the reconnect before clearing the failure counters so we
+            // don't reset them (and let a sibling subscription trigger a second
+            // overlapping reconnect) while the session swap is still in flight.
+            // The next loop iteration re-subscribes on whatever session is
+            // current once this resolves.
+            try {
+              await this.reconnect();
+            } catch {
+              // A failed reconnect surfaces through the next subscription
+              // attempt's own retry/backoff path.
+            }
+            this.subscriptionFailureEscalating = false;
+            this.consecutiveSubscriptionFailures = 0;
+            continue;
+          }
+
           await sleep(retryDelayMs);
         }
       }

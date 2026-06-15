@@ -100,6 +100,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { StickyRunHeader } from "./chat/StickyRunHeader";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
@@ -3851,6 +3852,19 @@ export default function ChatView(props: ChatViewProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Messages Wrapper */}
           <div className="relative flex min-h-0 flex-1 flex-col">
+            <StickyRunHeader
+              isWorking={isWorking}
+              phase={phase}
+              provider={selectedProvider}
+              interactionMode={interactionMode}
+              runtimeMode={runtimeMode}
+              activePlan={activePlan}
+              activePlanCompletedSteps={
+                activePlan?.steps.filter((s) => s.status === "completed").length ?? 0
+              }
+              activePlanTotalSteps={activePlan?.steps.length ?? 0}
+              onInterrupt={onInterrupt}
+            />
             {/* Messages — LegendList handles virtualization and scrolling internally */}
             <MessagesTimeline
               key={activeThread.id}
@@ -3894,6 +3908,7 @@ export default function ChatView(props: ChatViewProps) {
           {/* Input bar */}
           <div
             className={cn(
+              "border-t border-border/30 bg-background/80 backdrop-blur-sm",
               "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-1.5 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2",
               isGitRepo
                 ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"

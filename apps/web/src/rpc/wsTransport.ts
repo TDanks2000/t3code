@@ -50,7 +50,17 @@ function createWsRpcProtocolLayer(
 const webWsTransportOptions = {
   tracingLayer: ClientTracingLive,
   createProtocolLayer: createWsRpcProtocolLayer,
-  onBeforeReconnect: () => clearAllTrackedRpcRequests(),
+  onBeforeReconnect: () => {
+    // Clear in-flight request tracking for the session being replaced, but do
+    // NOT wipe the store here. The fresh shell snapshot delivered over the new
+    // session (see syncEnvironmentShellSnapshot) is an authoritative full
+    // replacement — it rebuilds projects/threads and drops anything no longer
+    // present. Clearing the store up front only produced an empty window where
+    // projects vanished and reappeared (or, if the snapshot was delayed/lost on
+    // an overlapping reconnect, never came back). Keeping the last-known state
+    // visible while the snapshot reconciles is both correct and far less jarring.
+    clearAllTrackedRpcRequests();
+  },
 } satisfies WsTransportOptions;
 
 export class WsTransport extends BaseWsTransport {

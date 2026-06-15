@@ -562,6 +562,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onKeyDown={handleRowKeyDown}
         onContextMenu={handleRowContextMenu}
       >
+        {isActive && (
+          <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
+        )}
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
           {prStatus && (
             <Tooltip>

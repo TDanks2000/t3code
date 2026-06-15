@@ -2035,6 +2035,7 @@ interface AppStore extends AppState {
     branch: string | null,
     worktreePath: string | null,
   ) => void;
+  resetStore: () => void;
 }
 
 export const useStore = create<AppStore>((set) => ({
@@ -2056,4 +2057,10 @@ export const useStore = create<AppStore>((set) => ({
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),
   setThreadBranch: (threadRef, branch, worktreePath) =>
     set((state) => setThreadBranch(state, threadRef, branch, worktreePath)),
+  resetStore: () => {
+    set((state) => ({
+      ...initialState,
+      activeEnvironmentId: state.activeEnvironmentId,
+    }));
+  },
 }));

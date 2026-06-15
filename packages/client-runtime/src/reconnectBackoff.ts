@@ -10,6 +10,12 @@ export interface ReconnectBackoffConfig {
   readonly maxDelayMs: number;
   /** Maximum number of retries (0-based). `null` means unlimited. */
   readonly maxRetries: number | null;
+  /**
+   * Jitter factor (0-1) to add randomness to the delay.
+   * 0 = no jitter, 0.5 = delay varies by ±50%, 1 = delay varies by ±100%.
+   * @default 0.3
+   */
+  readonly jitterFactor?: number;
 }
 
 /**
@@ -40,8 +46,20 @@ export function getReconnectDelayMs(
     return null;
   }
 
-  return Math.min(
+  const baseDelay = Math.min(
     Math.round(config.initialDelayMs * config.backoffFactor ** retryIndex),
     config.maxDelayMs,
   );
+
+  const jitterFactor = config.jitterFactor ?? 0.3;
+  if (jitterFactor > 0) {
+    const jitterRange = Math.round(baseDelay * jitterFactor);
+    const random =
+      typeof crypto !== "undefined" && typeof crypto.getRandomValues !== "undefined"
+        ? (crypto.getRandomValues(new Uint32Array(1))[0] as number) / 0xffffffff
+        : 0.5;
+    return baseDelay + Math.round((random * 2 - 1) * jitterRange);
+  }
+
+  return baseDelay;
 }

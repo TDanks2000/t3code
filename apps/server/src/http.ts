@@ -48,6 +48,22 @@ const FALLBACK_PROJECT_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" vi
 const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 
+export const healthzRouteLayer = HttpRouter.add(
+  "GET",
+  "/healthz",
+  Effect.gen(function* () {
+    const config = yield* ServerConfig;
+    return yield* HttpServerResponse.json({
+      status: "ok" as const,
+      uptime: performance.now(),
+      port: config.port,
+      mode: config.mode,
+    });
+  }).pipe(
+    Effect.orElseSucceed(() => HttpServerResponse.text("Health check failed", { status: 500 })),
+  ),
+);
+
 export const browserApiCorsLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;

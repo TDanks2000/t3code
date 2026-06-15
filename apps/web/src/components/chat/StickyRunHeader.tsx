@@ -1,0 +1,120 @@
+import type { ActivePlanState } from "~/session-logic";
+import type { ProviderDriverKind, RuntimeMode, ProviderInteractionMode } from "@t3tools/contracts";
+import { LoaderIcon, SquareIcon, PauseIcon } from "lucide-react";
+import { memo } from "react";
+import { cn } from "~/lib/utils";
+import { Button } from "../ui/button";
+
+interface StickyRunHeaderProps {
+  isWorking: boolean;
+  phase: "running" | "ready" | "connecting" | "disconnected";
+  provider: ProviderDriverKind;
+  interactionMode: ProviderInteractionMode;
+  runtimeMode: RuntimeMode;
+  activePlan: ActivePlanState | null;
+  activePlanCompletedSteps: number;
+  activePlanTotalSteps: number;
+  onInterrupt: () => void;
+}
+
+export const StickyRunHeader = memo(function StickyRunHeader({
+  isWorking,
+  phase,
+  provider,
+  interactionMode,
+  runtimeMode,
+  activePlan,
+  activePlanCompletedSteps,
+  activePlanTotalSteps,
+  onInterrupt,
+}: StickyRunHeaderProps) {
+  if (!isWorking && phase !== "running") return null;
+
+  const isRunning = isWorking || phase === "running";
+
+  return (
+    <div
+      className={cn(
+        "sticky top-0 z-20 flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs transition-colors",
+        isRunning ? "border-primary/20 bg-primary/[0.04]" : "border-border/40 bg-muted/20",
+      )}
+    >
+      {/* Status indicator */}
+      <span className="flex shrink-0 items-center gap-1.5">
+        <span className="relative flex size-2">
+          {isRunning ? (
+            <>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </>
+          ) : (
+            <span className="inline-flex size-2 rounded-full bg-muted-foreground/30" />
+          )}
+        </span>
+        <span
+          className={cn(
+            "font-medium tabular-nums",
+            isRunning ? "text-primary" : "text-muted-foreground/70",
+          )}
+        >
+          {isRunning ? "Running" : "Idle"}
+        </span>
+      </span>
+
+      {/* Provider */}
+      {provider && (
+        <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/70">
+          {provider}
+        </span>
+      )}
+
+      {/* Mode */}
+      {interactionMode && (
+        <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+          {interactionMode === "plan" ? "Plan" : "Chat"}
+        </span>
+      )}
+
+      {/* Runtime mode */}
+      {runtimeMode && (
+        <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+          {runtimeMode}
+        </span>
+      )}
+
+      {/* Plan progress */}
+      {activePlan && activePlanTotalSteps > 0 && (
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/50 tabular-nums">
+            <span className="font-medium text-foreground/70">{activePlanCompletedSteps}</span>
+            <span>/</span>
+            <span>{activePlanTotalSteps}</span>
+            <span>steps</span>
+          </span>
+          <div className="h-1 w-16 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary/60 transition-all duration-500"
+              style={{ width: `${(activePlanCompletedSteps / activePlanTotalSteps) * 100}%` }}
+            />
+          </div>
+        </span>
+      )}
+
+      {/* Stop button */}
+      {isRunning && (
+        <span className="ml-1 flex shrink-0 items-center">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            onClick={onInterrupt}
+            aria-label="Stop current run"
+            className="text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive"
+          >
+            <SquareIcon className="size-3 fill-current" />
+          </Button>
+        </span>
+      )}
+    </div>
+  );
+});

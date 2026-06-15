@@ -305,25 +305,25 @@ export function resolveThreadRowClassName(input: {
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-primary/22 text-foreground font-medium hover:bg-primary/26 hover:text-foreground dark:bg-primary/30 dark:hover:bg-primary/36",
+      "bg-primary/25 text-foreground font-medium hover:bg-primary/30 hover:text-foreground dark:bg-primary/35 dark:hover:bg-primary/42",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-primary/15 text-foreground hover:bg-primary/19 hover:text-foreground dark:bg-primary/22 dark:hover:bg-primary/28",
+      "bg-primary/18 text-foreground hover:bg-primary/22 hover:text-foreground dark:bg-primary/25 dark:hover:bg-primary/32",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-accent/85 text-foreground font-medium hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70",
+      "bg-accent text-foreground font-medium shadow-xs hover:bg-accent/90 hover:text-foreground dark:bg-accent/65 dark:hover:bg-accent/80",
     );
   }
 
-  return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
+  return cn(baseClassName, "text-muted-foreground/70 hover:bg-accent hover:text-foreground");
 }
 
 export function resolveThreadStatusPill(input: {

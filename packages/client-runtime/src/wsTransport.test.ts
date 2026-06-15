@@ -928,6 +928,8 @@ describe("WsTransport", () => {
     };
     const transport = {
       disposed: false,
+      intentionalCloseSessionIds: new Set<number>(),
+      activeSessionId: 0,
       session: {
         clientScope: {} as never,
         runtime,

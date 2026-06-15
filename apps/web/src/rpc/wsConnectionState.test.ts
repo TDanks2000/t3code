@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 
 import {
   getWsConnectionStatus,
-  getWsReconnectDelayMsForRetry,
   getWsConnectionUiState,
   recordWsConnectionAttempt,
   recordWsConnectionClosed,
@@ -10,8 +9,14 @@ import {
   recordWsConnectionOpened,
   resetWsConnectionStateForTests,
   setBrowserOnlineStatus,
+  WS_RECONNECT_INITIAL_DELAY_MS,
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "./wsConnectionState";
+
+// Mirror of the reconnect backoff jitter factor (see reconnectBackoff.ts).
+// The scheduled delay is randomized by ±JITTER_FACTOR, so assertions check the
+// window rather than an exact value.
+const RECONNECT_JITTER_FACTOR = 0.3;
 
 describe("wsConnectionState", () => {
   beforeEach(() => {
@@ -50,17 +55,22 @@ describe("wsConnectionState", () => {
     });
     recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.");
 
-    const firstRetryDelayMs = getWsReconnectDelayMsForRetry(0);
-    if (firstRetryDelayMs === null) {
-      throw new Error("Expected an initial retry delay.");
-    }
-
-    expect(getWsConnectionStatus()).toMatchObject({
+    const status = getWsConnectionStatus();
+    expect(status).toMatchObject({
       connectionLabel: "Remote Mac",
-      nextRetryAt: new Date(Date.now() + firstRetryDelayMs).toISOString(),
       reconnectAttemptCount: 1,
       reconnectPhase: "waiting",
     });
+
+    // Time is frozen by fake timers, so the delta is exactly the jittered
+    // delay the state machine scheduled. The first retry uses the initial
+    // delay, randomized within ±RECONNECT_JITTER_FACTOR.
+    expect(status.nextRetryAt).not.toBeNull();
+    const scheduledDelayMs = new Date(status.nextRetryAt!).getTime() - Date.now();
+    const minDelayMs = Math.round(WS_RECONNECT_INITIAL_DELAY_MS * (1 - RECONNECT_JITTER_FACTOR));
+    const maxDelayMs = Math.round(WS_RECONNECT_INITIAL_DELAY_MS * (1 + RECONNECT_JITTER_FACTOR));
+    expect(scheduledDelayMs).toBeGreaterThanOrEqual(minDelayMs);
+    expect(scheduledDelayMs).toBeLessThanOrEqual(maxDelayMs);
   });
 
   it("adds a version mismatch hint to websocket errors when metadata includes one", () => {

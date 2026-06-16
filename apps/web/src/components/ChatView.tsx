@@ -62,6 +62,7 @@ import {
   hasActionableProposedPlan,
   isLatestTurnSettled,
 } from "../session-logic";
+import { deriveLatestRateLimitSnapshot } from "../lib/rateLimits";
 import { type LegendListRef } from "@legendapp/list/react";
 import {
   buildPendingUserInputAnswers,
@@ -1579,6 +1580,10 @@ export default function ChatView(props: ChatViewProps) {
   const activePlan = useMemo(
     () => deriveActivePlanState(threadActivities, activeLatestTurn?.turnId ?? undefined),
     [activeLatestTurn?.turnId, threadActivities],
+  );
+  const rateLimitSnapshot = useMemo(
+    () => deriveLatestRateLimitSnapshot(threadActivities),
+    [threadActivities],
   );
   const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
   const showPlanFollowUpPrompt =
@@ -3863,6 +3868,7 @@ export default function ChatView(props: ChatViewProps) {
                 activePlan?.steps.filter((s) => s.status === "completed").length ?? 0
               }
               activePlanTotalSteps={activePlan?.steps.length ?? 0}
+              rateLimit={rateLimitSnapshot}
               onInterrupt={onInterrupt}
             />
             {/* Messages — LegendList handles virtualization and scrolling internally */}

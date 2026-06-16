@@ -1,6 +1,8 @@
 import type { ActivePlanState } from "~/session-logic";
 import type { ProviderDriverKind, RuntimeMode, ProviderInteractionMode } from "@t3tools/contracts";
-import { LoaderIcon, SquareIcon, PauseIcon } from "lucide-react";
+import type { ProviderRateLimitSnapshot } from "~/lib/rateLimits";
+import { formatRateLimitPercent, formatResetsAt } from "~/lib/rateLimits";
+import { SquareIcon, GaugeIcon } from "lucide-react";
 import { memo } from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
@@ -14,6 +16,7 @@ interface StickyRunHeaderProps {
   activePlan: ActivePlanState | null;
   activePlanCompletedSteps: number;
   activePlanTotalSteps: number;
+  rateLimit: ProviderRateLimitSnapshot | null;
   onInterrupt: () => void;
 }
 
@@ -26,6 +29,7 @@ export const StickyRunHeader = memo(function StickyRunHeader({
   activePlan,
   activePlanCompletedSteps,
   activePlanTotalSteps,
+  rateLimit,
   onInterrupt,
 }: StickyRunHeaderProps) {
   if (!isWorking && phase !== "running") return null;
@@ -79,6 +83,37 @@ export const StickyRunHeader = memo(function StickyRunHeader({
       {runtimeMode && (
         <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
           {runtimeMode}
+        </span>
+      )}
+
+      {/* Rate limit */}
+      {rateLimit && (rateLimit.primary || rateLimit.secondary) && (
+        <span
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70"
+          title={[
+            rateLimit.planType ? `Plan: ${rateLimit.planType}` : "",
+            rateLimit.creditsBalance ? `Credits: ${rateLimit.creditsBalance}` : "",
+            rateLimit.primary
+              ? `${rateLimit.primary.label}: ${formatRateLimitPercent(rateLimit.primary.usedPercent) ?? "?"} ${rateLimit.primary.resetsAt ? `(${formatResetsAt(rateLimit.primary.resetsAt)})` : ""}`
+              : "",
+            rateLimit.secondary
+              ? `${rateLimit.secondary.label}: ${formatRateLimitPercent(rateLimit.secondary.usedPercent) ?? "?"} ${rateLimit.secondary.resetsAt ? `(${formatResetsAt(rateLimit.secondary.resetsAt)})` : ""}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        >
+          <GaugeIcon className="size-2.5 text-muted-foreground/50" />
+          <span className="text-muted-foreground/70">
+            {rateLimit.primary
+              ? `${formatRateLimitPercent(rateLimit.primary.usedPercent) ?? "?"}`
+              : rateLimit.secondary
+                ? `${formatRateLimitPercent(rateLimit.secondary.usedPercent) ?? "?"}`
+                : null}
+          </span>
+          {rateLimit.planType && (
+            <span className="text-muted-foreground/50">{rateLimit.planType}</span>
+          )}
         </span>
       )}
 

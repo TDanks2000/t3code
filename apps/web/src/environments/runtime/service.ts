@@ -1115,6 +1115,14 @@ function applyShellEvent(event: OrchestrationShellStreamEvent, environmentId: En
 function createEnvironmentConnectionHandlers() {
   return {
     applyShellEvent,
+    // When the shell stream resubscribes (WS reconnect or server restart), the
+    // server's event sequence may have reset. Clearing the last-applied version
+    // ensures the next snapshot is always accepted regardless of its sequence
+    // number, preventing threads from getting stuck in "running" state when the
+    // new snapshot has a lower sequence than the previously-applied one.
+    onShellResubscribe: (environmentId: EnvironmentId) => {
+      lastAppliedProjectionVersionByEnvironment.delete(environmentId);
+    },
     syncShellSnapshot: (snapshot: OrchestrationShellSnapshot, environmentId: EnvironmentId) => {
       // TODO(CLIENT-RUNTIME MIGRATION - DO NOT EXPAND THIS WEB-ONLY COPY):
       // Shell snapshots already have createShellSnapshotManager in

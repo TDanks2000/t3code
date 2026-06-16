@@ -124,6 +124,7 @@ import {
   selectProjectGroupingSettings,
 } from "../logicalProject";
 import {
+  getEnvironmentHttpBaseUrl,
   reconnectSavedEnvironment,
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
@@ -1889,6 +1890,9 @@ export default function ChatView(props: ChatViewProps) {
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
+  const activeThreadEnvironmentHttpBaseUrl = activeThread
+    ? (getEnvironmentHttpBaseUrl(activeThread.environmentId) ?? undefined)
+    : undefined;
   const activeTerminalLaunchContext =
     terminalUiLaunchContext?.threadId === activeThreadId ? terminalUiLaunchContext : null;
   // Default true while loading to avoid toolbar flicker.
@@ -3882,6 +3886,7 @@ export default function ChatView(props: ChatViewProps) {
               latestTurn={activeLatestTurn}
               turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
               activeThreadEnvironmentId={activeThread.environmentId}
+              environmentHttpBaseUrl={activeThreadEnvironmentHttpBaseUrl}
               routeThreadKey={routeThreadKey}
               onOpenTurnDiff={onOpenTurnDiff}
               revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}

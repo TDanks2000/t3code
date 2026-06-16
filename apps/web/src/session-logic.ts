@@ -60,6 +60,13 @@ export type WorkLogToolLifecycleStatus =
   | "declined"
   | "stopped";
 
+export type WorkEntryImagePreview = {
+  readonly kind: "workspace_file";
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+};
+
 export interface WorkLogEntry {
   id: string;
   createdAt: string;
@@ -77,6 +84,8 @@ export interface WorkLogEntry {
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
   /** Originating orchestration activity kind (e.g. `user-input.requested`) for row chrome. */
   sourceActivityKind?: OrchestrationThreadActivity["kind"];
+  /** Image previews extracted from tool call payloads (e.g. image_view). */
+  imagePreviews?: ReadonlyArray<WorkEntryImagePreview>;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -674,6 +683,62 @@ function extractWorkLogToolLifecycleStatus(
   return undefined;
 }
 
+const IMAGE_FILE_EXTENSION_REGEX = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+const MAX_WORKSPACE_IMAGE_PREVIEWS = 12;
+
+function isProbablyLocalImagePath(value: string): boolean {
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return false;
+  }
+  if (value.includes("\0")) {
+    return false;
+  }
+  return IMAGE_FILE_EXTENSION_REGEX.test(value);
+}
+
+function extractImageFilePaths(input: unknown): ReadonlyArray<string> {
+  const paths = new Set<string>();
+
+  const visit = (value: unknown): void => {
+    if (paths.size >= MAX_WORKSPACE_IMAGE_PREVIEWS) {
+      return;
+    }
+    if (typeof value === "string") {
+      if (isProbablyLocalImagePath(value)) {
+        paths.add(value);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const nestedValue of Object.values(value)) {
+        visit(nestedValue);
+      }
+    }
+  };
+
+  visit(input);
+  return Array.from(paths).slice(0, MAX_WORKSPACE_IMAGE_PREVIEWS);
+}
+
+export function workspaceFilePreviewRoutePath(filePath: string): string {
+  return `/workspace-files?path=${encodeURIComponent(filePath)}`;
+}
+
+function toWorkspaceImagePreview(filePath: string): WorkEntryImagePreview {
+  return {
+    kind: "workspace_file",
+    id: `workspace-file:${filePath}`,
+    name: filePath.split(/[\\/]/).at(-1) ?? filePath,
+    path: filePath,
+  };
+}
+
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
@@ -740,6 +805,12 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (requestKind) {
     entry.requestKind = requestKind;
   }
+  if (itemType === "image_view") {
+    const imagePaths = extractImageFilePaths(payload?.data ?? payload);
+    if (imagePaths.length > 0) {
+      entry.imagePreviews = imagePaths.map(toWorkspaceImagePreview);
+    }
+  }
   if (toolCallId) {
     entry.toolCallId = toolCallId;
   }
@@ -802,6 +873,7 @@ function mergeDerivedWorkLogEntries(
   next: DerivedWorkLogEntry,
 ): DerivedWorkLogEntry {
   const changedFiles = mergeChangedFiles(previous.changedFiles, next.changedFiles);
+  const imagePreviews = mergeImagePreviews(previous.imagePreviews, next.imagePreviews);
   const detail = next.detail ?? previous.detail;
   const command = next.command ?? previous.command;
   const rawCommand = next.rawCommand ?? previous.rawCommand;
@@ -818,6 +890,7 @@ function mergeDerivedWorkLogEntries(
     ...(command ? { command } : {}),
     ...(rawCommand ? { rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
+    ...(imagePreviews.length > 0 ? { imagePreviews } : {}),
     ...(toolTitle ? { toolTitle } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
@@ -836,6 +909,20 @@ function mergeChangedFiles(
     return [];
   }
   return [...new Set(merged)];
+}
+
+function mergeImagePreviews(
+  previous: ReadonlyArray<WorkEntryImagePreview> | undefined,
+  next: ReadonlyArray<WorkEntryImagePreview> | undefined,
+): WorkEntryImagePreview[] {
+  const seen = new Set<string>();
+  const merged: WorkEntryImagePreview[] = [];
+  for (const preview of [...(previous ?? []), ...(next ?? [])]) {
+    if (seen.has(preview.id)) continue;
+    seen.add(preview.id);
+    merged.push(preview);
+  }
+  return merged;
 }
 
 function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | undefined {

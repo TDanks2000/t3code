@@ -26,6 +26,7 @@ import {
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
   workLogEntryIsToolLike,
+  workspaceFilePreviewRoutePath,
 } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
@@ -107,6 +108,7 @@ interface TimelineRowSharedState {
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   workspaceRoot: string | undefined;
+  environmentHttpBaseUrl: string | undefined;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
@@ -146,6 +148,7 @@ interface MessagesTimelineProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
+  environmentHttpBaseUrl?: string | undefined;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -173,6 +176,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
+  environmentHttpBaseUrl,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -303,6 +307,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       markdownCwd,
       resolvedTheme,
       workspaceRoot,
+      environmentHttpBaseUrl,
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
@@ -316,6 +321,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       markdownCwd,
       resolvedTheme,
       workspaceRoot,
+      environmentHttpBaseUrl,
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
@@ -1446,6 +1452,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workspaceRoot: string | undefined;
 }) {
   const { workEntry, workspaceRoot } = props;
+  const ctx = use(TimelineRowCtx);
   const activity = use(TimelineRowActivityCtx);
   const [expanded, setExpanded] = useState(false);
   const iconConfig = workToneIcon(workEntry.tone);
@@ -1634,6 +1641,41 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           </pre>
         </div>
       </div>
+
+      {/* Image previews */}
+      {workEntry.imagePreviews && workEntry.imagePreviews.length > 0 && ctx.environmentHttpBaseUrl ? (
+        <div
+          className="ml-7 mt-1.5 grid grid-cols-2 gap-1.5"
+          onClick={stopRowToggle}
+          onPointerDown={stopRowToggle}
+        >
+          {workEntry.imagePreviews.map((preview, index) => {
+            const previewUrl = `${ctx.environmentHttpBaseUrl}${workspaceFilePreviewRoutePath(preview.path)}`;
+            return (
+              <button
+                key={preview.id}
+                type="button"
+                className="overflow-hidden rounded-md border border-border/40 bg-muted/20 cursor-zoom-in"
+                aria-label={`Preview ${preview.name}`}
+                onClick={() => {
+                  const gallery = workEntry.imagePreviews!.map((p) => ({
+                    src: `${ctx.environmentHttpBaseUrl}${workspaceFilePreviewRoutePath(p.path)}`,
+                    name: p.name,
+                  }));
+                  ctx.onImageExpand({ images: gallery, index });
+                }}
+              >
+                <img
+                  src={previewUrl}
+                  alt={preview.name}
+                  className="block h-auto max-h-[100px] w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 });

@@ -18,6 +18,7 @@ import {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   isLatestTurnSettled,
+  workspaceFilePreviewRoutePath,
   workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
@@ -1621,5 +1622,113 @@ describe("deriveActiveWorkStartedAt", () => {
         "2026-02-27T21:11:00.000Z",
       ),
     ).toBe("2026-02-27T21:11:00.000Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// image_view preview extraction
+// ---------------------------------------------------------------------------
+
+function makeImageViewActivity(input: Record<string, unknown>) {
+  return makeActivity({
+    kind: "tool.completed",
+    summary: "View image",
+    tone: "tool",
+    payload: {
+      itemType: "image_view",
+      data: { item: { input } },
+    },
+  });
+}
+
+describe("image_view preview extraction", () => {
+  it("extracts file_path from an image_view input", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ file_path: "/workspace/screenshot.png" }),
+    ]);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.imagePreviews).toEqual([
+      {
+        kind: "workspace_file",
+        id: "workspace-file:/workspace/screenshot.png",
+        name: "screenshot.png",
+        path: "/workspace/screenshot.png",
+      },
+    ]);
+  });
+
+  it("extracts nested image paths recursively", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ nested: { deep: { path: "/home/user/photo.jpg" } } }),
+    ]);
+    expect(entries[0]?.imagePreviews?.[0]?.path).toBe("/home/user/photo.jpg");
+  });
+
+  it("extracts image paths from arrays", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ paths: ["/a/foo.png", "/b/bar.webp"] }),
+    ]);
+    const paths = entries[0]?.imagePreviews?.map((p) => p.path) ?? [];
+    expect(paths).toContain("/a/foo.png");
+    expect(paths).toContain("/b/bar.webp");
+  });
+
+  it("ignores non-image paths", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ file_path: "/workspace/readme.md" }),
+    ]);
+    expect(entries[0]?.imagePreviews).toBeUndefined();
+  });
+
+  it("ignores remote URLs", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ url: "https://example.com/image.png" }),
+    ]);
+    expect(entries[0]?.imagePreviews).toBeUndefined();
+  });
+
+  it("de-duplicates repeated paths", () => {
+    const entries = deriveWorkLogEntries([
+      makeImageViewActivity({ a: "/work/img.png", b: "/work/img.png" }),
+    ]);
+    expect(entries[0]?.imagePreviews).toHaveLength(1);
+  });
+
+  it("caps preview count at 12", () => {
+    const input: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) {
+      input[`f${i}`] = `/work/image-${i}.png`;
+    }
+    const entries = deriveWorkLogEntries([makeImageViewActivity(input)]);
+    expect(entries[0]?.imagePreviews?.length).toBe(12);
+  });
+
+  it("does not extract paths for non-image_view tool calls", () => {
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        kind: "tool.completed",
+        summary: "Read file",
+        tone: "tool",
+        payload: {
+          itemType: "file_read",
+          data: { item: { input: { file_path: "/workspace/photo.png" } } },
+        },
+      }),
+    ]);
+    expect(entries[0]?.imagePreviews).toBeUndefined();
+  });
+});
+
+describe("workspaceFilePreviewRoutePath", () => {
+  it("produces an encoded query-param route for a simple path", () => {
+    expect(workspaceFilePreviewRoutePath("/work/image.png")).toBe(
+      "/workspace-files?path=%2Fwork%2Fimage.png",
+    );
+  });
+
+  it("encodes special characters in the path", () => {
+    const path = "/my workspace/a+b?c=d&e.png";
+    const result = workspaceFilePreviewRoutePath(path);
+    expect(result).toBe(`/workspace-files?path=${encodeURIComponent(path)}`);
   });
 });

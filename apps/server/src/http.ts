@@ -243,6 +243,116 @@ export const attachmentsRouteLayer = HttpRouter.add(
   ),
 );
 
+const WORKSPACE_FILE_IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".avif",
+  ".bmp",
+]);
+
+const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
+};
+
+function isInsideWorkspace(
+  path: Path.Path,
+  workspaceRootRealPath: string,
+  targetRealPath: string,
+): boolean {
+  if (targetRealPath === workspaceRootRealPath) return false;
+  const relativePath = path.relative(workspaceRootRealPath, targetRealPath);
+  return (
+    relativePath !== "" &&
+    !relativePath.startsWith("..") &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
+export const workspaceFileRouteLayer = HttpRouter.add(
+  "GET",
+  "/workspace-files",
+  Effect.gen(function* () {
+    yield* authenticateRawRouteWithScope(AuthOrchestrationReadScope);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const config = yield* ServerConfig;
+    const rawPath = url.value.searchParams.get("path");
+    if (!rawPath || rawPath.trim().length === 0) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    if (rawPath.includes("\0")) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    if (rawPath.startsWith("http://") || rawPath.startsWith("https://")) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const targetPath = path.resolve(config.cwd, rawPath);
+    const ext = path.extname(targetPath).toLowerCase();
+    if (!WORKSPACE_FILE_IMAGE_EXTENSIONS.has(ext)) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    const contentType = IMAGE_CONTENT_TYPE_BY_EXTENSION[ext] ?? "application/octet-stream";
+
+    const targetRealPath = yield* fileSystem.realPath(targetPath).pipe(
+      Effect.orElseSucceed(() => null),
+    );
+    if (targetRealPath === null) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    const workspaceRealPath = yield* fileSystem.realPath(config.cwd).pipe(
+      Effect.orElseSucceed(() => null),
+    );
+    if (workspaceRealPath === null) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    if (!isInsideWorkspace(path, workspaceRealPath, targetRealPath)) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    const fileInfo = yield* fileSystem.stat(targetRealPath).pipe(Effect.orElseSucceed(() => null));
+    if (!fileInfo || fileInfo.type !== "File") {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    return yield* HttpServerResponse.file(targetRealPath, {
+      status: 200,
+      headers: {
+        "Cache-Control": "private, max-age=60",
+        "Content-Type": contentType,
+      },
+    }).pipe(
+      Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
+    );
+  }).pipe(
+    Effect.catchTags({
+      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+      EnvironmentInternalError: HttpServerRespondable.toResponse,
+      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
+    }),
+  ),
+);
+
 export const projectFaviconRouteLayer = HttpRouter.add(
   "GET",
   "/api/project-favicon",

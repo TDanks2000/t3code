@@ -428,6 +428,15 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     );
   });
 
+  const listAll: WorkspaceEntriesShape["listAll"] = Effect.fn("WorkspaceEntries.listAll")(
+    function* (cwd) {
+      const normalizedCwd = yield* normalizeWorkspaceRoot(cwd);
+      return yield* Cache.get(workspaceIndexCache, normalizedCwd).pipe(
+        Effect.map((index) => ({ entries: index.entries, truncated: index.truncated })),
+      );
+    },
+  );
+
   const invalidate: WorkspaceEntriesShape["invalidate"] = Effect.fn("WorkspaceEntries.invalidate")(
     function* (cwd) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(cwd).pipe(
@@ -531,6 +540,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   return {
     browse,
     invalidate,
+    listAll,
     search,
   } satisfies WorkspaceEntriesShape;
 });

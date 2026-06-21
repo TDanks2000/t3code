@@ -121,7 +121,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
     sharedServerState.serverScope = null;
     sharedServerState.binaryPath = null;
     if (scope !== null) {
-      yield* Scope.close(scope, Exit.void).pipe(Effect.ignore);
+      yield* Scope.close(scope, Exit.void).pipe(Effect.ignoreCause({ log: true }));
     }
   });
 
@@ -129,7 +129,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
     const idleCloseFiber = sharedServerState.idleCloseFiber;
     sharedServerState.idleCloseFiber = null;
     if (idleCloseFiber !== null) {
-      yield* Fiber.interrupt(idleCloseFiber).pipe(Effect.ignore);
+      yield* Fiber.interrupt(idleCloseFiber).pipe(Effect.ignoreCause({ log: true }));
     }
   });
 
@@ -224,7 +224,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
               ),
             );
             if (startedExit._tag === "Failure") {
-              yield* Scope.close(serverScope, Exit.void).pipe(Effect.ignore);
+              yield* Scope.close(serverScope, Exit.void).pipe(Effect.ignoreCause({ log: true }));
               return yield* Effect.failCause(startedExit.cause);
             }
 

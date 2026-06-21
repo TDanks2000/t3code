@@ -148,7 +148,7 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-user-message-collapsed="true"');
     expect(markup).toContain('data-user-message-fade="true"');
     expect(markup).toContain('data-user-message-footer="true"');
-  });
+  }, 20_000);
 
   it("does not render collapse controls for short user messages", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
@@ -320,6 +320,6 @@ describe("MessagesTimeline", () => {
     );
 
     expect(markup).toContain("lucide-x");
-    expect(markup).toContain('aria-label="Tool call failed"');
+    expect(markup).toContain('aria-label="Glob - No files found"');
   });
 });

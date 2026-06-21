@@ -3,6 +3,7 @@ import {
   ArrowUpDownIcon,
   ChevronRightIcon,
   CloudIcon,
+  Code2Icon,
   FolderPlusIcon,
   LayoutDashboardIcon,
   SearchIcon,
@@ -89,6 +90,7 @@ import { useModelPickerOpen } from "../modelPickerOpenState";
 import { useShortcutModifierState } from "../shortcutModifierState";
 import { useVcsStatus } from "../lib/vcsStatusState";
 import { readLocalApi } from "../localApi";
+
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
@@ -1764,6 +1766,57 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [createThreadForProjectMember, project.groupedProjectCount, project.memberProjects],
   );
 
+  const handleOpenIdeClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      const openProjectMemberInIde = (
+        member: Pick<SidebarProjectGroupMember, "environmentId" | "cwd">,
+      ) => {
+        void router.navigate({
+          to: "/ide",
+          search: { environmentId: member.environmentId, workspaceRoot: member.cwd },
+        });
+      };
+
+      if (project.memberProjects.length === 1) {
+        openProjectMemberInIde(project.memberProjects[0]!);
+        return;
+      }
+
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) {
+          openProjectMemberInIde(project);
+          return;
+        }
+        const clicked = await api.contextMenu.show(
+          project.memberProjects.map((member) => ({
+            id: member.physicalProjectKey,
+            label: formatProjectMemberActionLabel(member, project.groupedProjectCount),
+          })),
+          {
+            x: event.clientX,
+            y: event.clientY,
+          },
+        );
+        if (!clicked) {
+          return;
+        }
+        const targetMember = project.memberProjects.find(
+          (member) => member.physicalProjectKey === clicked,
+        );
+        if (targetMember) {
+          openProjectMemberInIde(targetMember);
+        }
+      })();
+    },
+    [isMobile, project, router, setOpenMobile],
+  );
+
   const attemptArchiveThread = useCallback(
     async (threadRef: ScopedThreadRef) => {
       try {
@@ -2004,7 +2057,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
           size="sm"
-          className={`gap-2 px-2 py-1.5 pr-8 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
+          className={`gap-2 px-2 py-1.5 pr-14 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-24 ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
           }`}
           {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2067,7 +2120,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                       ? "Remote project"
                       : "Available in multiple environments"
                   }
-                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-7 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
+                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-16 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
                 />
               }
             >
@@ -2078,6 +2131,24 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             </TooltipPopup>
           </Tooltip>
         )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <div className="pointer-events-none absolute top-[calc(50%+1px)] right-8 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`Open ${project.displayName} in IDE`}
+                  data-testid="open-in-ide-button"
+                  className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                  onClick={handleOpenIdeClick}
+                >
+                  <Code2Icon className="size-3.5" />
+                </button>
+              </div>
+            }
+          />
+          <TooltipPopup side="top">Open in IDE</TooltipPopup>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -2530,7 +2601,14 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     }
     void navigate({ to: "/mission-board" });
   }, [isMobile, navigate, setOpenMobile]);
+  const handleIdeClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void navigate({ to: "/ide" });
+  }, [isMobile, navigate, setOpenMobile]);
   const onMissionBoard = pathname === "/mission-board";
+  const onIde = pathname === "/ide";
 
   return (
     <SidebarFooter className="p-2">
@@ -2546,6 +2624,17 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           >
             <LayoutDashboardIcon className="size-3.5" />
             <span className="text-xs">Mission Board</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+            onClick={handleIdeClick}
+            data-active={onIde || undefined}
+          >
+            <Code2Icon className="size-3.5" />
+            <span className="text-xs">IDE</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>

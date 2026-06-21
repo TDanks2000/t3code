@@ -39,6 +39,14 @@ import {
   VcsStatusStreamEvent,
 } from "./git.ts";
 import {
+  GitReviewGetStatusInput,
+  GitReviewStatusResult,
+  GitReviewGetFileDiffInput,
+  GitReviewFileDiffResult,
+  GitReviewRevertFileInput,
+  GitReviewRevertFileResult,
+} from "./gitReview.ts";
+import {
   ReviewDiffPreviewError,
   ReviewDiffPreviewInput,
   ReviewDiffPreviewResult,
@@ -108,6 +116,14 @@ import {
 } from "./server.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
+  WorkspaceGetFileTreeResult,
+  WorkspaceRootInput,
+  WorkspaceReadTextFileInput,
+  WorkspaceReadTextFileResult,
+  WorkspaceWriteTextFileInput,
+  WorkspaceWriteTextFileResult,
+} from "./workspace.ts";
+import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -118,6 +134,7 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import { DiagnosticsRunError, DiagnosticsRunInput, DiagnosticsRunResult } from "./diagnostics.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -133,6 +150,11 @@ export const WS_METHODS = {
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
 
+  // Workspace methods
+  workspaceGetFileTree: "workspace.getFileTree",
+  workspaceReadTextFile: "workspace.readTextFile",
+  workspaceWriteTextFile: "workspace.writeTextFile",
+
   // VCS methods
   vcsPull: "vcs.pull",
   vcsRefreshStatus: "vcs.refreshStatus",
@@ -147,6 +169,11 @@ export const WS_METHODS = {
   gitRunStackedAction: "git.runStackedAction",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+
+  // Git review methods
+  gitGetStatus: "git.getStatus",
+  gitGetFileDiff: "git.getFileDiff",
+  gitRevertFile: "git.revertFile",
 
   // Review methods
   reviewGetDiffPreview: "review.getDiffPreview",
@@ -186,6 +213,9 @@ export const WS_METHODS = {
   // Usage / cost methods
   serverGetUsageSummary: "server.getUsageSummary",
   serverListToolInvocations: "server.listToolInvocations",
+
+  // Diagnostics methods
+  diagnosticsRun: "diagnostics.run",
 
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
@@ -337,6 +367,30 @@ export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
   payload: FilesystemBrowseInput,
   success: FilesystemBrowseResult,
   error: Schema.Union([FilesystemBrowseError, EnvironmentAuthorizationError]),
+});
+
+export const WsWorkspaceGetFileTreeRpc = Rpc.make(WS_METHODS.workspaceGetFileTree, {
+  payload: WorkspaceRootInput,
+  success: WorkspaceGetFileTreeResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsWorkspaceReadTextFileRpc = Rpc.make(WS_METHODS.workspaceReadTextFile, {
+  payload: WorkspaceReadTextFileInput,
+  success: WorkspaceReadTextFileResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsWorkspaceWriteTextFileRpc = Rpc.make(WS_METHODS.workspaceWriteTextFile, {
+  payload: WorkspaceWriteTextFileInput,
+  success: WorkspaceWriteTextFileResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsDiagnosticsRunRpc = Rpc.make(WS_METHODS.diagnosticsRun, {
+  payload: DiagnosticsRunInput,
+  success: DiagnosticsRunResult,
+  error: Schema.Union([DiagnosticsRunError, EnvironmentAuthorizationError]),
 });
 
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
@@ -517,6 +571,24 @@ export const WsOrchestrationSubscribeThreadRpc = Rpc.make(
   },
 );
 
+export const WsGitGetStatusRpc = Rpc.make(WS_METHODS.gitGetStatus, {
+  payload: GitReviewGetStatusInput,
+  success: GitReviewStatusResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsGitGetFileDiffRpc = Rpc.make(WS_METHODS.gitGetFileDiff, {
+  payload: GitReviewGetFileDiffInput,
+  success: GitReviewFileDiffResult,
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsGitRevertFileRpc = Rpc.make(WS_METHODS.gitRevertFile, {
+  payload: GitReviewRevertFileInput,
+  success: GitReviewRevertFileResult,
+  error: EnvironmentAuthorizationError,
+});
+
 export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: Schema.Struct({}),
   success: TerminalEvent,
@@ -586,6 +658,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
+  WsWorkspaceGetFileTreeRpc,
+  WsWorkspaceReadTextFileRpc,
+  WsWorkspaceWriteTextFileRpc,
+  WsDiagnosticsRunRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
   WsVcsRefreshStatusRpc,
@@ -599,6 +675,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsSwitchRefRpc,
   WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
+  WsGitGetStatusRpc,
+  WsGitGetFileDiffRpc,
+  WsGitRevertFileRpc,
   WsTerminalOpenRpc,
   WsTerminalAttachRpc,
   WsTerminalWriteRpc,

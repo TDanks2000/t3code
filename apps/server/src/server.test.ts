@@ -138,6 +138,7 @@ import * as CloudCliTokenManager from "./cloud/CliTokenManager.ts";
 import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
+import { layer as ProcessRunnerLive } from "./processRunner.ts";
 import * as Data from "effect/Data";
 
 const defaultProjectId = ProjectId.make("project-default");
@@ -804,13 +805,19 @@ const buildAppUnderTest = (options?: {
                 totalCostUsd: 0,
                 totalInputTokens: 0,
                 totalOutputTokens: 0,
+                totalCachedInputTokens: 0,
+                totalReasoningTokens: 0,
               }),
             aggregateAll: Effect.succeed({
               totalTurns: 0,
               totalCostUsd: 0,
               totalInputTokens: 0,
               totalOutputTokens: 0,
+              totalCachedInputTokens: 0,
+              totalReasoningTokens: 0,
             }),
+            aggregateByProviderAll: Effect.succeed([]),
+            aggregateByModelAll: Effect.succeed([]),
           }),
         ),
       ),
@@ -829,6 +836,7 @@ const buildAppUnderTest = (options?: {
       Layer.provideMerge(ServerSecretStore.layer),
       Layer.provide(workspaceAndProjectServicesLayer),
       Layer.provideMerge(FetchHttpClient.layer),
+      Layer.provideMerge(ProcessRunnerLive.pipe(Layer.provide(NodeServices.layer))),
       Layer.provide(layerConfig),
     );
 

@@ -521,6 +521,10 @@ function Toasts({ position }: { position: ToastPosition }) {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
   const activeThreadRef = useActiveThreadRefFromRoute();
   const isTop = position.startsWith("top");
+  const isBottom = position.startsWith("bottom");
+  const isLeft = position.includes("left");
+  const isRight = position.includes("right");
+  const isCenter = position.includes("center");
   const visibleToasts = toasts.filter((toast) =>
     shouldRenderThreadScopedToast(toast.data, activeThreadRef),
   );
@@ -539,20 +543,19 @@ function Toasts({ position }: { position: ToastPosition }) {
     <Toast.Portal data-slot="toast-portal">
       <Toast.Viewport
         className={cn(
-          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 data-[position*=center]:max-w-lg data-[position*=center]:sm:max-w-xl [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
-          // Vertical positioning
-          "data-[position*=top]:top-[calc(var(--toast-inset)+var(--toast-header-offset))]",
-          "data-[position*=bottom]:bottom-(--toast-inset)",
-          // Horizontal positioning
-          "data-[position*=left]:left-(--toast-inset)",
-          "data-[position*=right]:right-(--toast-inset)",
-          "data-[position*=center]:-translate-x-1/2 data-[position*=center]:left-1/2",
+          "fixed z-100 mx-auto flex min-w-0 max-w-90 data-[position*=center]:max-w-lg data-[position*=center]:sm:max-w-xl [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
+          isCenter && "-translate-x-1/2",
         )}
         data-position={position}
         data-slot="toast-viewport"
         style={
           {
             "--toast-frontmost-height": `${visibleToastLayout.frontmostHeight}px`,
+            width: "calc(100% - var(--toast-inset) * 2)",
+            top: isTop ? "calc(var(--toast-inset) + var(--toast-header-offset))" : undefined,
+            bottom: isBottom ? "var(--toast-inset)" : undefined,
+            left: isCenter || isLeft ? (isCenter ? "50%" : "var(--toast-inset)") : undefined,
+            right: isRight ? "var(--toast-inset)" : undefined,
           } as CSSProperties
         }
       >
@@ -567,7 +570,7 @@ function Toasts({ position }: { position: ToastPosition }) {
           return (
             <Toast.Root
               className={cn(
-                "absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+                "absolute z-[calc(9999_-_var(--toast-index))] min-w-72 w-full overflow-visible select-none rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)_-_1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -575,7 +578,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                 "data-[position*=top]:top-0 data-[position*=top]:bottom-auto data-[position*=top]:origin-top",
                 "data-[position*=bottom]:top-auto data-[position*=bottom]:bottom-0 data-[position*=bottom]:origin-bottom",
                 // Gap fill for hover
-                "after:absolute after:left-0 after:h-[calc(var(--toast-gap)+1px)] after:w-full",
+                "after:absolute after:left-0 after:h-[calc(var(--toast-gap)_+_1px)] after:w-full",
                 "data-[position*=top]:after:top-full",
                 "data-[position*=bottom]:after:bottom-full",
                 // `--toast-calc-height`: behind + collapsed = peek height only (content `opacity-0`);
@@ -583,7 +586,7 @@ function Toasts({ position }: { position: ToastPosition }) {
                 visibleIndex > 0
                   ? "not-data-expanded:[--toast-calc-height:var(--toast-frontmost-height)] data-expanded:[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))]"
                   : "[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))]",
-                "[--toast-gap:--spacing(3)] [--toast-peek:--spacing(3)] [--toast-scale:calc(max(0,1-(var(--toast-index)*.1)))] [--toast-shrink:calc(1-var(--toast-scale))]",
+                "[--toast-gap:--spacing(3)] [--toast-peek:--spacing(3)] [--toast-scale:calc(max(0,1_-_(var(--toast-index)*.1)))] [--toast-shrink:calc(1_-_var(--toast-scale))]",
                 // Root height: never `min-h-(--toast-height)` — Base UI measures height by briefly forcing
                 // `height: auto` on this node; an old `min-height` from `--toast-height` blocks shrinking,
                 // so `recalculateHeight` keeps the inflated value after an expandable closes.
@@ -592,32 +595,32 @@ function Toasts({ position }: { position: ToastPosition }) {
                   ? "not-data-expanded:h-(--toast-calc-height) data-expanded:h-auto"
                   : "h-auto",
                 // Define offset-y variable
-                "data-[position*=top]:[--toast-calc-offset-y:calc(var(--toast-offset-y)+var(--toast-index)*var(--toast-gap)+var(--toast-swipe-movement-y))]",
-                "data-[position*=bottom]:[--toast-calc-offset-y:calc(var(--toast-offset-y)*-1+var(--toast-index)*var(--toast-gap)*-1+var(--toast-swipe-movement-y))]",
+                "data-[position*=top]:[--toast-calc-offset-y:calc(var(--toast-offset-y)_+_var(--toast-index)*var(--toast-gap)_+_var(--toast-swipe-movement-y))]",
+                "data-[position*=bottom]:[--toast-calc-offset-y:calc(var(--toast-offset-y)*-1_+_var(--toast-index)*var(--toast-gap)*-1_+_var(--toast-swipe-movement-y))]",
                 // Default state transform
-                "data-[position*=top]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+(var(--toast-index)*var(--toast-peek))+(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
-                "data-[position*=bottom]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--toast-peek))-(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
+                "data-[position*=top]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)_+_(var(--toast-index)*var(--toast-peek))_+_(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
+                "data-[position*=bottom]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)_-_(var(--toast-index)*var(--toast-peek))_-_(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
                 // Limited state
                 "data-limited:opacity-0",
                 // Expanded stack
                 "data-position:data-expanded:transform-[translateX(var(--toast-swipe-movement-x))_translateY(var(--toast-calc-offset-y))]",
                 // Starting and ending animations
-                "data-[position*=top]:data-starting-style:transform-[translateY(calc(-100%-var(--toast-inset)))]",
-                "data-[position*=bottom]:data-starting-style:transform-[translateY(calc(100%+var(--toast-inset)))]",
-                "data-[position*=top]:data-[position*=right]:data-starting-style:transform-[translateX(calc(100%+var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-[position*=top]:data-starting-style:transform-[translateY(calc(-100%_-_var(--toast-inset)))]",
+                "data-[position*=bottom]:data-starting-style:transform-[translateY(calc(100%_+_var(--toast-inset)))]",
+                "data-[position*=top]:data-[position*=right]:data-starting-style:transform-[translateX(calc(100%_+_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
                 "data-ending-style:opacity-0",
                 // Ending animations (direction-aware)
-                "data-ending-style:not-data-limited:not-data-swipe-direction:transform-[translateY(calc(100%+var(--toast-inset)))]",
-                "data-[position*=top]:data-[position*=right]:data-ending-style:not-data-limited:not-data-swipe-direction:transform-[translateX(calc(100%+var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-100%-var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+100%+var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-100%-var(--toast-inset)))]",
-                "data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+100%+var(--toast-inset)))]",
+                "data-ending-style:not-data-limited:not-data-swipe-direction:transform-[translateY(calc(100%_+_var(--toast-inset)))]",
+                "data-[position*=top]:data-[position*=right]:data-ending-style:not-data-limited:not-data-swipe-direction:transform-[translateX(calc(100%_+_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)_-_100%_-_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)_+_100%_+_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)_-_100%_-_var(--toast-inset)))]",
+                "data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)_+_100%_+_var(--toast-inset)))]",
                 // Ending animations (expanded)
-                "data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-100%-var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+100%+var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-100%-var(--toast-inset)))]",
-                "data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+100%+var(--toast-inset)))]",
+                "data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)_-_100%_-_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)_+_100%_+_var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
+                "data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)_-_100%_-_var(--toast-inset)))]",
+                "data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)_+_100%_+_var(--toast-inset)))]",
               )}
               data-position={position}
               key={toast.id}
@@ -721,8 +724,8 @@ function AnchoredToasts() {
                   className={cn(
                     "relative overflow-visible text-balance border bg-popover not-dark:bg-clip-padding text-popover-foreground text-xs transition-[scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
                     tooltipStyle
-                      ? "rounded-md shadow-md/5 before:rounded-[calc(var(--radius-md)-1px)]"
-                      : "rounded-lg shadow-lg/5 before:rounded-[calc(var(--radius-lg)-1px)]",
+                      ? "rounded-md shadow-md/5 before:rounded-[calc(var(--radius-md)_-_1px)]"
+                      : "rounded-lg shadow-lg/5 before:rounded-[calc(var(--radius-lg)_-_1px)]",
                   )}
                   data-slot="toast-popup"
                   toast={toast}

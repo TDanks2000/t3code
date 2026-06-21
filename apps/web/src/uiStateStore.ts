@@ -21,6 +21,7 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  ideSelectedFilePath?: Record<string, string | null>;
 }
 
 export interface UiProjectState {
@@ -37,7 +38,11 @@ export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiIdeState {
+  ideSelectedFilePath: Record<string, string | null>;
+}
+
+export interface UiState extends UiProjectState, UiThreadState, UiEndpointState, UiIdeState {}
 
 export interface SyncProjectInput {
   /** Physical project key (env + cwd). Used for manual sort order. */
@@ -58,6 +63,7 @@ const initialState: UiState = {
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
+  ideSelectedFilePath: {},
 };
 
 const persistedCollapsedProjectCwds = new Set<string>();
@@ -103,10 +109,26 @@ function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
+      ideSelectedFilePath:
+        parsed.ideSelectedFilePath && typeof parsed.ideSelectedFilePath === "object"
+          ? sanitizeIdeSelectedFilePath(parsed.ideSelectedFilePath)
+          : {},
     };
   } catch {
     return initialState;
   }
+}
+
+function sanitizeIdeSelectedFilePath(
+  value: Record<string, unknown>,
+): Record<string, string | null> {
+  const result: Record<string, string | null> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (typeof key === "string" && (val === null || typeof val === "string")) {
+      result[key] = val;
+    }
+  }
+  return result;
 }
 
 function sanitizePersistedThreadChangedFilesExpanded(
@@ -195,6 +217,7 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
+        ideSelectedFilePath: state.ideSelectedFilePath,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -641,6 +664,7 @@ interface UiStateStore extends UiState {
   clearThreadUi: (threadId: string) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
+  setIdeSelectedFilePath: (environmentId: string, filePath: string | null) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
   reorderProjects: (
@@ -662,6 +686,13 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
+  setIdeSelectedFilePath: (environmentId, filePath) =>
+    set((state) => ({
+      ideSelectedFilePath: {
+        ...state.ideSelectedFilePath,
+        [environmentId]: filePath,
+      },
+    })),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

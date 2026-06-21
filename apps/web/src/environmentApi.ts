@@ -25,6 +25,14 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     filesystem: {
       browse: rpcClient.filesystem.browse,
     },
+    diagnostics: {
+      run: rpcClient.diagnostics.run,
+    },
+    workspace: {
+      getFileTree: rpcClient.workspace.getFileTree,
+      readTextFile: rpcClient.workspace.readTextFile,
+      writeTextFile: rpcClient.workspace.writeTextFile,
+    },
     sourceControl: {
       lookupRepository: rpcClient.sourceControl.lookupRepository,
       cloneRepository: rpcClient.sourceControl.cloneRepository,
@@ -44,6 +52,11 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
     git: {
       resolvePullRequest: rpcClient.git.resolvePullRequest,
       preparePullRequestThread: rpcClient.git.preparePullRequestThread,
+    },
+    gitReview: {
+      getStatus: rpcClient.gitReview.getStatus,
+      getFileDiff: rpcClient.gitReview.getFileDiff,
+      revertFile: rpcClient.gitReview.revertFile,
     },
     review: {
       getDiffPreview: rpcClient.review.getDiffPreview,

@@ -1,4 +1,6 @@
 import {
+  type DiagnosticsRunInput,
+  type DiagnosticsRunResult,
   type GitActionProgressEvent,
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
@@ -10,6 +12,12 @@ import {
   type VcsStatusResult,
   type VcsStatusStreamEvent,
   WS_METHODS,
+  type WorkspaceGetFileTreeResult,
+  type WorkspaceRootInput,
+  type WorkspaceReadTextFileInput,
+  type WorkspaceReadTextFileResult,
+  type WorkspaceWriteTextFileInput,
+  type WorkspaceWriteTextFileResult,
 } from "@t3tools/contracts";
 import { applyGitStatusStreamEvent } from "@t3tools/shared/git";
 import type * as Effect from "effect/Effect";
@@ -122,6 +130,11 @@ export interface WsRpcClient {
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
   };
+  readonly gitReview: {
+    readonly getStatus: RpcUnaryMethod<typeof WS_METHODS.gitGetStatus>;
+    readonly getFileDiff: RpcUnaryMethod<typeof WS_METHODS.gitGetFileDiff>;
+    readonly revertFile: RpcUnaryMethod<typeof WS_METHODS.gitRevertFile>;
+  };
   readonly review: {
     readonly getDiffPreview: RpcUnaryMethod<typeof WS_METHODS.reviewGetDiffPreview>;
   };
@@ -159,6 +172,18 @@ export interface WsRpcClient {
     readonly installRelayClient: (
       onProgress?: (event: RelayClientInstallProgressEvent) => void,
     ) => Promise<RelayClientStatus>;
+  };
+  readonly diagnostics: {
+    readonly run: (input: DiagnosticsRunInput) => Promise<DiagnosticsRunResult>;
+  };
+  readonly workspace: {
+    readonly getFileTree: (input?: WorkspaceRootInput) => Promise<WorkspaceGetFileTreeResult>;
+    readonly readTextFile: (
+      input: WorkspaceReadTextFileInput,
+    ) => Promise<WorkspaceReadTextFileResult>;
+    readonly writeTextFile: (
+      input: WorkspaceWriteTextFileInput,
+    ) => Promise<WorkspaceWriteTextFileResult>;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -223,6 +248,17 @@ export function createWsRpcClient(
     filesystem: {
       browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),
     },
+    diagnostics: {
+      run: (input) => transport.request((client) => client[WS_METHODS.diagnosticsRun](input)),
+    },
+    workspace: {
+      getFileTree: (input) =>
+        transport.request((client) => client[WS_METHODS.workspaceGetFileTree](input ?? {})),
+      readTextFile: (input) =>
+        transport.request((client) => client[WS_METHODS.workspaceReadTextFile](input)),
+      writeTextFile: (input) =>
+        transport.request((client) => client[WS_METHODS.workspaceWriteTextFile](input)),
+    },
     sourceControl: {
       lookupRepository: (input) =>
         transport.request((client) => client[WS_METHODS.sourceControlLookupRepository](input)),
@@ -283,6 +319,12 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestThread: (input) =>
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+    },
+    gitReview: {
+      getStatus: (input) => transport.request((client) => client[WS_METHODS.gitGetStatus](input)),
+      getFileDiff: (input) =>
+        transport.request((client) => client[WS_METHODS.gitGetFileDiff](input)),
+      revertFile: (input) => transport.request((client) => client[WS_METHODS.gitRevertFile](input)),
     },
     review: {
       getDiffPreview: (input) =>

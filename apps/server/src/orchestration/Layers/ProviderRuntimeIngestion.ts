@@ -673,6 +673,11 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
   });
 
+  // Tracks the most recent per-turn token snapshot from thread.token-usage.updated events
+  // so that providers that don't embed usage in turn.completed (Codex, Grok, OpenCode, Cursor)
+  // can still have their token counts recorded for usage stats.
+  const latestTokenUsageByThread = new Map<ThreadId, ThreadTokenUsageSnapshot>();
+
   const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
     return yield* projectionSnapshotQuery
       .getThreadDetailById(threadId)
@@ -1582,16 +1587,37 @@ const make = Effect.gen(function* () {
         }
       }
 
+      if (event.type === "thread.token-usage.updated" && event.payload.usage.usedTokens > 0) {
+        latestTokenUsageByThread.set(thread.id, event.payload.usage);
+      }
+
       if (event.type === "turn.completed") {
         const turnId = toTurnId(event.turnId);
         if (turnId) {
           const usage = event.payload.usage as
             | { input_tokens?: number; output_tokens?: number; cached_input_tokens?: number }
             | undefined;
-          const inputTokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : 0;
-          const outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : 0;
-          const cachedInputTokens =
+          let inputTokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : 0;
+          let outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : 0;
+          let cachedInputTokens =
             typeof usage?.cached_input_tokens === "number" ? usage.cached_input_tokens : 0;
+          let reasoningTokens = 0;
+          let durationMs = 0;
+
+          // Providers that don't embed usage in turn.completed (Codex, Grok, OpenCode, Cursor)
+          // emit thread.token-usage.updated events with last-turn token counts. Use them as
+          // fallback when the completion event carries no usage data.
+          if (inputTokens === 0 && outputTokens === 0 && typeof event.payload.totalCostUsd !== "number") {
+            const cachedUsage = latestTokenUsageByThread.get(thread.id);
+            if (cachedUsage) {
+              inputTokens = cachedUsage.lastInputTokens ?? 0;
+              outputTokens = cachedUsage.lastOutputTokens ?? 0;
+              cachedInputTokens = cachedUsage.lastCachedInputTokens ?? 0;
+              reasoningTokens = cachedUsage.lastReasoningOutputTokens ?? 0;
+              durationMs = cachedUsage.durationMs ?? 0;
+            }
+          }
+
           const model =
             typeof event.payload.modelUsage?.model === "string"
               ? event.payload.modelUsage.model
@@ -1617,9 +1643,9 @@ const make = Effect.gen(function* () {
               inputTokens,
               outputTokens,
               cachedInputTokens,
-              reasoningTokens: 0,
+              reasoningTokens,
               totalTokens: inputTokens + outputTokens,
-              durationMs: 0,
+              durationMs,
               costUsd,
               currency: "USD",
               createdAt: now,

@@ -23,6 +23,7 @@ import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagn
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatMissionBoardRouteImport } from './routes/_chat.mission-board'
+import { Route as ChatIdeRouteImport } from './routes/_chat.ide'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
 
@@ -95,6 +96,11 @@ const ChatMissionBoardRoute = ChatMissionBoardRouteImport.update({
   path: '/mission-board',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatIdeRoute = ChatIdeRouteImport.update({
+  id: '/ide',
+  path: '/ide',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/ide': typeof ChatIdeRoute
   '/mission-board': typeof ChatMissionBoardRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/ide': typeof ChatIdeRoute
   '/mission-board': typeof ChatMissionBoardRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/_chat/ide': typeof ChatIdeRoute
   '/_chat/mission-board': typeof ChatMissionBoardRoute
   '/settings/archived': typeof SettingsArchivedRoute
   '/settings/connections': typeof SettingsConnectionsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/pair'
     | '/settings'
+    | '/ide'
     | '/mission-board'
     | '/settings/archived'
     | '/settings/connections'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/pair'
     | '/settings'
+    | '/ide'
     | '/mission-board'
     | '/settings/archived'
     | '/settings/connections'
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/pair'
     | '/settings'
+    | '/_chat/ide'
     | '/_chat/mission-board'
     | '/settings/archived'
     | '/settings/connections'
@@ -322,6 +334,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatMissionBoardRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/ide': {
+      id: '/_chat/ide'
+      path: '/ide'
+      fullPath: '/ide'
+      preLoaderRoute: typeof ChatIdeRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -340,6 +359,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface ChatRouteChildren {
+  ChatIdeRoute: typeof ChatIdeRoute
   ChatMissionBoardRoute: typeof ChatMissionBoardRoute
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
@@ -347,6 +367,7 @@ interface ChatRouteChildren {
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
+  ChatIdeRoute: ChatIdeRoute,
   ChatMissionBoardRoute: ChatMissionBoardRoute,
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,

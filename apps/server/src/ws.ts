@@ -74,10 +74,13 @@ import { redactServerSettingsForClient, ServerSettingsService } from "./serverSe
 import { TerminalManager } from "./terminal/Services/Manager.ts";
 import { WorkspaceEntries } from "./workspace/Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "./workspace/Services/WorkspaceFileSystem.ts";
+import { DiagnosticsService } from "./workspace/Services/DiagnosticsService.ts";
+import { DiagnosticsServiceLive } from "./workspace/Layers/DiagnosticsService.ts";
 import { WorkspacePathOutsideRootError } from "./workspace/Services/WorkspacePaths.ts";
 import { VcsStatusBroadcaster } from "./vcs/VcsStatusBroadcaster.ts";
 import { VcsProvisioningService } from "./vcs/VcsProvisioningService.ts";
 import { GitWorkflowService } from "./git/GitWorkflowService.ts";
+import { GitReviewService, GitReviewServiceLive } from "./git/GitReviewService.ts";
 import { ReviewService } from "./review/ReviewService.ts";
 import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { RepositoryIdentityResolver } from "./project/Services/RepositoryIdentityResolver.ts";
@@ -104,6 +107,10 @@ import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http
 import * as RelayClient from "@t3tools/shared/relayClient";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
+const resolveWorkspaceRpcCwd = (inputCwd: string | undefined, fallbackCwd: string): string => {
+  const trimmed = inputCwd?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallbackCwd;
+};
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -158,6 +165,10 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.sourceControlPublishRepository, AuthOrchestrationOperateScope],
   [WS_METHODS.projectsSearchEntries, AuthOrchestrationReadScope],
   [WS_METHODS.projectsWriteFile, AuthOrchestrationOperateScope],
+  [WS_METHODS.workspaceGetFileTree, AuthOrchestrationReadScope],
+  [WS_METHODS.workspaceReadTextFile, AuthOrchestrationReadScope],
+  [WS_METHODS.workspaceWriteTextFile, AuthOrchestrationOperateScope],
+  [WS_METHODS.diagnosticsRun, AuthOrchestrationReadScope],
   [WS_METHODS.shellOpenInEditor, AuthOrchestrationOperateScope],
   [WS_METHODS.filesystemBrowse, AuthOrchestrationReadScope],
   [WS_METHODS.subscribeVcsStatus, AuthOrchestrationReadScope],
@@ -173,6 +184,9 @@ const RPC_REQUIRED_SCOPE = new Map<string, AuthEnvironmentScope>([
   [WS_METHODS.vcsSwitchRef, AuthOrchestrationOperateScope],
   [WS_METHODS.vcsInit, AuthOrchestrationOperateScope],
   [WS_METHODS.reviewGetDiffPreview, AuthReviewWriteScope],
+  [WS_METHODS.gitGetStatus, AuthOrchestrationReadScope],
+  [WS_METHODS.gitGetFileDiff, AuthOrchestrationReadScope],
+  [WS_METHODS.gitRevertFile, AuthOrchestrationOperateScope],
   [WS_METHODS.terminalOpen, AuthTerminalOperateScope],
   [WS_METHODS.terminalAttach, AuthTerminalOperateScope],
   [WS_METHODS.terminalWrite, AuthTerminalOperateScope],
@@ -240,6 +254,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
       const keybindings = yield* Keybindings;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const gitWorkflow = yield* GitWorkflowService;
+      const gitReview = yield* GitReviewService;
       const review = yield* ReviewService;
       const vcsProvisioning = yield* VcsProvisioningService;
       const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
@@ -252,6 +267,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
       const startup = yield* ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem;
+      const diagnosticsService = yield* DiagnosticsService;
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
       const repositoryIdentityResolver = yield* RepositoryIdentityResolver;
       const serverEnvironment = yield* ServerEnvironment;
@@ -1190,6 +1206,53 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
             ),
             { "rpc.aggregate": "workspace" },
           ),
+        [WS_METHODS.workspaceGetFileTree]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.workspaceGetFileTree,
+            workspaceEntries.listAll(resolveWorkspaceRpcCwd(input.cwd, config.cwd)).pipe(
+              Effect.map((index) => ({
+                entries: index.entries.map((entry) => {
+                  const lastSlash = entry.path.lastIndexOf("/");
+                  return {
+                    path: entry.path,
+                    name: lastSlash === -1 ? entry.path : entry.path.slice(lastSlash + 1),
+                    kind: entry.kind,
+                    parentPath: entry.parentPath,
+                  };
+                }),
+                truncated: index.truncated,
+              })),
+              Effect.mapError(
+                (cause) =>
+                  new EnvironmentAuthorizationError({
+                    message: `Failed to load workspace file tree: ${cause.detail}`,
+                    requiredScope: AuthOrchestrationReadScope,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.workspaceReadTextFile]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.workspaceReadTextFile,
+            workspaceFileSystem.readTextFile(
+              resolveWorkspaceRpcCwd(input.cwd, config.cwd),
+              input.relativePath,
+            ),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.workspaceWriteTextFile]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.workspaceWriteTextFile,
+            workspaceFileSystem.writeTextFile(resolveWorkspaceRpcCwd(input.cwd, config.cwd), input),
+            { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.diagnosticsRun]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.diagnosticsRun,
+            diagnosticsService.run(input, resolveWorkspaceRpcCwd(input.cwd, config.cwd)),
+            { "rpc.aggregate": "diagnostics" },
+          ),
         [WS_METHODS.subscribeVcsStatus]: (input) =>
           observeRpcStream(
             WS_METHODS.subscribeVcsStatus,
@@ -1299,6 +1362,24 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
           observeRpcEffect(WS_METHODS.reviewGetDiffPreview, review.getDiffPreview(input), {
             "rpc.aggregate": "review",
           }),
+        [WS_METHODS.gitGetStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitGetStatus,
+            gitReview.getStatus(resolveWorkspaceRpcCwd(input.cwd, config.cwd)),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitGetFileDiff]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitGetFileDiff,
+            gitReview.getFileDiff(resolveWorkspaceRpcCwd(input.cwd, config.cwd), input.path),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitRevertFile]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitRevertFile,
+            gitReview.revertFile(resolveWorkspaceRpcCwd(input.cwd, config.cwd), input.path),
+            { "rpc.aggregate": "git" },
+          ),
         [WS_METHODS.terminalOpen]: (input) =>
           observeRpcEffect(WS_METHODS.terminalOpen, terminalManager.open(input), {
             "rpc.aggregate": "terminal",
@@ -1425,38 +1506,55 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
         [WS_METHODS.serverGetUsageSummary]: (input) =>
           observeRpcEffect(
             WS_METHODS.serverGetUsageSummary,
-            (input.projectId
-              ? turnCostRepository.aggregateByProject(input.projectId)
-              : turnCostRepository.aggregateAll
-            ).pipe(
-              Effect.catch((_e) =>
-                Effect.succeed({
-                  totalTurns: 0,
-                  totalCostUsd: 0,
-                  totalInputTokens: 0,
-                  totalOutputTokens: 0,
-                }),
-              ),
-              Effect.map(
-                (agg) =>
-                  agg ?? {
-                    totalTurns: 0,
-                    totalCostUsd: 0,
-                    totalInputTokens: 0,
-                    totalOutputTokens: 0,
-                  },
-              ),
-              Effect.map((agg) => ({
+            Effect.gen(function* () {
+              const emptyTotals = {
+                totalTurns: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalCachedInputTokens: 0,
+                totalReasoningTokens: 0,
+              };
+              const [totals, byProvider, byModel] = yield* Effect.all([
+                (input.projectId
+                  ? turnCostRepository.aggregateByProject(input.projectId)
+                  : turnCostRepository.aggregateAll
+                ).pipe(Effect.catch(() => Effect.succeed(emptyTotals))),
+                turnCostRepository.aggregateByProviderAll.pipe(
+                  Effect.catch(() => Effect.succeed([])),
+                ),
+                turnCostRepository.aggregateByModelAll.pipe(
+                  Effect.catch(() => Effect.succeed([])),
+                ),
+              ]);
+              const agg = totals ?? emptyTotals;
+              return {
                 totalTurns: agg.totalTurns,
                 totalCostUsd: agg.totalCostUsd,
                 totalInputTokens: agg.totalInputTokens,
                 totalOutputTokens: agg.totalOutputTokens,
-                totalCachedInputTokens: 0,
-                totalReasoningTokens: 0,
-                byProvider: [],
-                byModel: [],
-              })),
-            ),
+                totalCachedInputTokens: agg.totalCachedInputTokens,
+                totalReasoningTokens: agg.totalReasoningTokens,
+                byProvider: byProvider
+                  .filter((p) => p.provider.trim().length > 0)
+                  .map((p) => ({
+                    provider: p.provider,
+                    totalTurns: p.totalTurns,
+                    totalCostUsd: p.totalCostUsd,
+                    totalInputTokens: p.totalInputTokens,
+                    totalOutputTokens: p.totalOutputTokens,
+                  })),
+                byModel: byModel
+                  .filter((m) => m.model.trim().length > 0)
+                  .map((m) => ({
+                    model: m.model,
+                    totalTurns: m.totalTurns,
+                    totalCostUsd: m.totalCostUsd,
+                    totalInputTokens: m.totalInputTokens,
+                    totalOutputTokens: m.totalOutputTokens,
+                  })),
+              };
+            }),
             { "rpc.aggregate": "usage" },
           ),
         [WS_METHODS.serverListToolInvocations]: (input) =>
@@ -1468,14 +1566,37 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
             ).pipe(
               Effect.catch((_e) => Effect.succeed([])),
               Effect.map((rows) =>
-                rows.map((row) => ({
-                  id: row.invocationId,
-                  turnId: row.turnId,
-                  threadId: row.threadId,
-                  toolType: row.toolType,
-                  startedAt: row.startedAt ?? row.createdAt,
-                  createdAt: row.createdAt,
-                })),
+                rows.map((row) => {
+                  const base = {
+                    id: row.invocationId,
+                    turnId: row.turnId,
+                    threadId: row.threadId,
+                    toolType: row.toolType,
+                    startedAt: row.startedAt ?? row.createdAt,
+                    createdAt: row.createdAt,
+                  };
+                  return Object.assign(
+                    base,
+                    row.provider !== undefined ? { provider: row.provider } : {},
+                    row.toolName !== undefined ? { toolName: row.toolName } : {},
+                    row.itemType !== undefined ? { itemType: row.itemType } : {},
+                    row.status !== undefined ? { status: row.status } : {},
+                    row.title !== undefined ? { title: row.title } : {},
+                    row.inputPreview !== undefined ? { inputPreview: row.inputPreview } : {},
+                    row.outputPreview !== undefined ? { outputPreview: row.outputPreview } : {},
+                    row.command !== undefined ? { command: row.command } : {},
+                    row.exitCode !== undefined ? { exitCode: row.exitCode } : {},
+                    row.elapsedMs !== undefined ? { elapsedMs: row.elapsedMs } : {},
+                    row.completedAt !== undefined ? { completedAt: row.completedAt } : {},
+                    row.filePathsJson !== undefined
+                      ? {
+                          filePaths: row.filePathsJson
+                            .split("\n")
+                            .filter((p: string) => p.trim().length > 0),
+                        }
+                      : {},
+                  );
+                }),
               ),
             ),
             { "rpc.aggregate": "usage" },
@@ -1557,6 +1678,8 @@ export const websocketRpcRouteLayer = Layer.unwrap(
                     ),
                   ),
                   Layer.provide(VcsProcess.layer),
+                  Layer.provideMerge(DiagnosticsServiceLive),
+                  Layer.provideMerge(GitReviewServiceLive),
                 ),
               ),
             ),

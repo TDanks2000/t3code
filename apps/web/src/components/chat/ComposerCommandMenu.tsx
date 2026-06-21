@@ -18,6 +18,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "../ui/command";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { VscodeEntryIcon } from "./VscodeEntryIcon";
 
 export type ComposerCommandItem =
@@ -213,7 +214,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
   const skillSourceLabel =
     props.item.type === "skill" ? formatProviderSkillInstallSource(props.item.skill) : null;
 
-  return (
+  const itemContent = (
     <CommandItem
       value={props.item.id}
       data-composer-item-id={props.item.id}
@@ -262,4 +263,33 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
       ) : null}
     </CommandItem>
   );
+
+  if (props.item.type === "skill") {
+    const skill = props.item.skill;
+    const fullDescription = skill.description;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger render={itemContent} />
+        <TooltipPopup side="right" align="start" sideOffset={8} className="max-w-100">
+          <div className="grid gap-1.5 py-0.5">
+            <p className="font-medium text-xs">{props.item.label}</p>
+            {fullDescription && (
+              <p className="text-muted-foreground text-xs leading-relaxed">{fullDescription}</p>
+            )}
+            {skill.scope && (
+              <p className="text-muted-foreground/60 text-[10px]">
+                Scope: <span className="capitalize">{skill.scope}</span>
+              </p>
+            )}
+            <p className="text-muted-foreground/50 text-[10px] font-mono truncate max-w-full">
+              {skill.path}
+            </p>
+          </div>
+        </TooltipPopup>
+      </Tooltip>
+    );
+  }
+
+  return itemContent;
 });

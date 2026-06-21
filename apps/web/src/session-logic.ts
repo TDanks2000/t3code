@@ -1265,6 +1265,45 @@ function extractToolDetail(
     }
   }
 
+  const webSearchDetail = extractWebSearchDetail(payload);
+  if (webSearchDetail) {
+    return webSearchDetail;
+  }
+
+  return null;
+}
+
+function extractWebSearchDetail(payload: Record<string, unknown> | null): string | null {
+  if (payload?.itemType !== "web_search") return null;
+  const data = asRecord(payload?.data);
+  const item = asRecord(data?.item);
+  // Codex webSearch item has query directly on the item
+  const directQuery = asTrimmedString(item?.query);
+  if (directQuery) return directQuery;
+  // CodexAdapter: data.item.action.{query,queries,url,pattern}
+  const action = asRecord(item?.action ?? data?.action);
+  if (action) {
+    const query = asTrimmedString(action.query);
+    if (query) return query;
+    const queries = Array.isArray(action.queries) ? action.queries : null;
+    const firstQuery = queries ? asTrimmedString(queries[0]) : null;
+    if (firstQuery) return firstQuery;
+    const url = asTrimmedString(action.url);
+    if (url) return url;
+    const pattern = asTrimmedString(action.pattern);
+    if (pattern) return pattern;
+  }
+  // Fallback: check rawInput (used by some MCP-based web search tools)
+  const rawInput = asRecord(data?.rawInput);
+  if (rawInput) {
+    const query =
+      asTrimmedString(rawInput.query) ??
+      asTrimmedString(rawInput.searchTerm) ??
+      asTrimmedString(rawInput.q);
+    if (query) return query;
+    const url = asTrimmedString(rawInput.url);
+    if (url) return url;
+  }
   return null;
 }
 

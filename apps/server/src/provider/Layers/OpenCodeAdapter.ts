@@ -9,6 +9,7 @@ import {
   RuntimeRequestId,
   RuntimeTaskId,
   ThreadId,
+  type ThreadTokenUsageSnapshot,
   type ToolLifecycleItemType,
   TurnId,
   type UserInputQuestion,
@@ -555,7 +556,7 @@ export function makeOpenCodeAdapter(
           message,
           class: "transport_error",
         },
-      }).pipe(Effect.ignore);
+      }).pipe(Effect.ignoreCause({ log: true }));
       yield* emit({
         ...(yield* buildEventBase({
           threadId: context.session.threadId,
@@ -567,7 +568,7 @@ export function makeOpenCodeAdapter(
           recoverable: false,
           exitKind: "error",
         },
-      }).pipe(Effect.ignore);
+      }).pipe(Effect.ignoreCause({ log: true }));
       // Inline the teardown that `stopOpenCodeContext` would do; we can't
       // delegate to it because our `getAndSet` above already flipped the
       // one-shot guard, so the call would no-op.
@@ -756,6 +757,7 @@ export function makeOpenCodeAdapter(
               ...(detail ? { detail } : {}),
               data: {
                 tool: part.tool,
+                toolCallId: part.callID,
                 state: part.state,
               },
             };
@@ -899,20 +901,23 @@ export function makeOpenCodeAdapter(
             break;
           }
 
-          if (event.properties.status.type === "idle" && turnId) {
+          if (event.properties.status.type === "idle") {
+            const completedTurnId = turnId ?? context.activeTurnId;
             context.activeTurnId = undefined;
             yield* updateProviderSession(context, { status: "ready" }, { clearActiveTurnId: true });
-            yield* emit({
-              ...(yield* buildEventBase({
-                threadId: context.session.threadId,
-                turnId,
-                raw: event,
-              })),
-              type: "turn.completed",
-              payload: {
-                state: "completed",
-              },
-            });
+            if (completedTurnId) {
+              yield* emit({
+                ...(yield* buildEventBase({
+                  threadId: context.session.threadId,
+                  turnId: completedTurnId,
+                  raw: event,
+                })),
+                type: "turn.completed",
+                payload: {
+                  state: "completed",
+                },
+              });
+            }
           }
           break;
         }
@@ -992,6 +997,34 @@ export function makeOpenCodeAdapter(
               summary: finishedAgent ? `${finishedAgent} step finished` : "Step finished",
             },
           });
+          // Emit token usage from step completion data.
+          const stepProps = event.properties as {
+            tokens?: {
+              input: number;
+              output: number;
+              reasoning: number;
+              cache: { read: number; write: number };
+            };
+            cost?: number;
+          };
+          if (stepProps.tokens) {
+            const { input, output, reasoning, cache } = stepProps.tokens;
+            const usage: ThreadTokenUsageSnapshot = {
+              usedTokens: input + output,
+              inputTokens: input,
+              outputTokens: output,
+              ...(reasoning > 0 ? { reasoningOutputTokens: reasoning } : {}),
+              ...(cache.read > 0 ? { cachedInputTokens: cache.read } : {}),
+            };
+            yield* emit({
+              ...(yield* buildEventBase({
+                threadId: context.session.threadId,
+                turnId: context.activeTurnId,
+              })),
+              type: "thread.token-usage.updated",
+              payload: { usage },
+            });
+          }
           break;
         }
 
@@ -1036,6 +1069,115 @@ export function makeOpenCodeAdapter(
             })),
             type: "turn.plan.updated",
             payload: { plan },
+          });
+          break;
+        }
+
+        case "session.diff": {
+          const diffProps = event.properties as {
+            diff: Array<{
+              file?: string;
+              patch?: string;
+              additions: number;
+              deletions: number;
+              status?: string;
+            }>;
+          };
+          if (diffProps.diff.length > 0) {
+            const unifiedDiff = diffProps.diff
+              .map((d) => {
+                const header = `diff --git a/${d.file ?? ""} b/${d.file ?? ""}`;
+                const status = d.status ? `\n${d.status}` : "";
+                return `${header}${status}\n${d.patch ?? ""}`;
+              })
+              .join("\n");
+            yield* emit({
+              ...(yield* buildEventBase({
+                threadId: context.session.threadId,
+                turnId: context.activeTurnId,
+                raw: event,
+              })),
+              type: "turn.diff.updated",
+              payload: { unifiedDiff },
+            });
+          }
+          break;
+        }
+
+        case "message.part.removed": {
+          const partRemovedProps = event.properties as { partID: string; messageID: string };
+          context.partById.delete(partRemovedProps.partID);
+          context.emittedTextByPartId.delete(partRemovedProps.partID);
+          context.completedAssistantPartIds.delete(partRemovedProps.partID);
+          break;
+        }
+
+        case "session.next.retried": {
+          const retryProps = event.properties as { attempt: number; error: { message: string } };
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              raw: event,
+            })),
+            type: "runtime.warning",
+            payload: {
+              message: `OpenCode retry #${retryProps.attempt}: ${retryProps.error.message}`,
+              detail: retryProps,
+            },
+          });
+          break;
+        }
+
+        case "session.next.agent.switched": {
+          const agentSwitchedProps = event.properties as { agent: string };
+          context.activeStepAgent = agentSwitchedProps.agent;
+          break;
+        }
+
+        case "session.next.model.switched": {
+          const modelSwitchedProps = event.properties as {
+            model: { id: string; providerID: string; variant?: string };
+          };
+          context.activeVariant = modelSwitchedProps.model.variant;
+          break;
+        }
+
+        case "session.next.shell.started": {
+          const shellStartedProps = event.properties as { callID: string; command: string };
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              itemId: shellStartedProps.callID,
+              raw: event,
+            })),
+            type: "item.started",
+            payload: {
+              itemType: "command_execution",
+              status: "inProgress",
+              title: shellStartedProps.command,
+            },
+          });
+          break;
+        }
+
+        case "session.next.shell.ended": {
+          const shellEndedProps = event.properties as { callID: string; output: string };
+          yield* emit({
+            ...(yield* buildEventBase({
+              threadId: context.session.threadId,
+              turnId: context.activeTurnId,
+              itemId: shellEndedProps.callID,
+              raw: event,
+            })),
+            type: "item.completed",
+            payload: {
+              itemType: "command_execution",
+              status: "completed",
+              title: "Shell command",
+              ...(shellEndedProps.output ? { detail: shellEndedProps.output } : {}),
+            },
           });
           break;
         }
@@ -1098,10 +1240,44 @@ export function makeOpenCodeAdapter(
         yield* context.server.exitCode.pipe(
           Effect.flatMap((code) =>
             Effect.gen(function* () {
-              if (yield* Ref.get(context.stopped)) {
-                return;
+              if (code === 0) {
+                // Server exited cleanly without a final JSON event.
+                // Complete the active turn and emit a graceful exit.
+                if (yield* Ref.getAndSet(context.stopped, true)) {
+                  return;
+                }
+                sessions.delete(context.session.threadId);
+                const turnId = context.activeTurnId;
+                context.activeTurnId = undefined;
+                if (turnId) {
+                  yield* emit({
+                    ...(yield* buildEventBase({
+                      threadId: context.session.threadId,
+                      turnId,
+                    })),
+                    type: "turn.completed",
+                    payload: { state: "completed" },
+                  }).pipe(Effect.ignoreCause({ log: true }));
+                }
+                yield* emit({
+                  ...(yield* buildEventBase({
+                    threadId: context.session.threadId,
+                    turnId,
+                  })),
+                  type: "session.exited",
+                  payload: {
+                    reason: "OpenCode server process exited.",
+                    recoverable: false,
+                    exitKind: "graceful",
+                  },
+                }).pipe(Effect.ignoreCause({ log: true }));
+                yield* Scope.close(context.sessionScope, Exit.void);
+              } else {
+                yield* emitUnexpectedExit(
+                  context,
+                  `OpenCode server exited unexpectedly (${code}).`,
+                );
               }
-              yield* emitUnexpectedExit(context, `OpenCode server exited unexpectedly (${code}).`);
             }),
           ),
           Effect.forkIn(context.sessionScope),
@@ -1159,7 +1335,7 @@ export function makeOpenCodeAdapter(
             }).pipe(Effect.provideService(Scope.Scope, sessionScope)),
           );
           if (Exit.isFailure(startedExit)) {
-            yield* Scope.close(sessionScope, Exit.void).pipe(Effect.ignore);
+            yield* Scope.close(sessionScope, Exit.void).pipe(Effect.ignoreCause({ log: true }));
             return yield* toProcessError(input.threadId, Cause.squash(startedExit.cause));
           }
           return startedExit.value;
@@ -1175,8 +1351,10 @@ export function makeOpenCodeAdapter(
             started.client.session.abort({
               sessionID: started.openCodeSession.id,
             }),
-          ).pipe(Effect.ignore);
-          yield* Scope.close(started.sessionScope, Exit.void).pipe(Effect.ignore);
+          ).pipe(Effect.ignoreCause({ log: true }));
+          yield* Scope.close(started.sessionScope, Exit.void).pipe(
+            Effect.ignoreCause({ log: true }),
+          );
           return raceWinner.session;
         }
 
@@ -1229,6 +1407,24 @@ export function makeOpenCodeAdapter(
           type: "thread.started",
           payload: {
             providerThreadId: started.openCodeSession.id,
+          },
+        });
+        yield* emit({
+          ...(yield* buildEventBase({ threadId: input.threadId })),
+          type: "session.configured",
+          payload: {
+            config: {
+              ...(input.modelSelection ? { model: input.modelSelection.model } : {}),
+              cwd: directory,
+            },
+          },
+        });
+        yield* emit({
+          ...(yield* buildEventBase({ threadId: input.threadId })),
+          type: "session.state.changed",
+          payload: {
+            state: "ready",
+            reason: "OpenCode session ready",
           },
         });
 

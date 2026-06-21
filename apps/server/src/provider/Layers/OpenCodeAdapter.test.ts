@@ -733,6 +733,74 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  it.effect("includes stable OpenCode tool call ids in normalized tool events", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-opencode-tool-call-id");
+      runtimeMock.state.subscribedEvents = [
+        {
+          type: "message.updated",
+          properties: {
+            sessionID: "http://127.0.0.1:9999/session",
+            info: {
+              id: "msg-tool-call-id",
+              role: "assistant",
+            },
+          },
+        },
+        {
+          type: "message.part.updated",
+          properties: {
+            sessionID: "http://127.0.0.1:9999/session",
+            part: {
+              id: "part-tool-call-id",
+              sessionID: "http://127.0.0.1:9999/session",
+              messageID: "msg-tool-call-id",
+              type: "tool",
+              callID: "call-1",
+              tool: "read",
+              state: {
+                status: "completed",
+                output: "done",
+                time: { start: 1, end: 2 },
+              },
+            },
+            time: 2,
+          },
+        },
+      ];
+      const eventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.threadId === threadId),
+        Stream.filter((event) => event.type === "item.completed"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("1 second")));
+      const completed = events[0];
+      assert.equal(completed?.type, "item.completed");
+      if (completed?.type === "item.completed") {
+        assert.equal(completed.itemId, "call-1");
+        assert.deepEqual(completed.payload.data, {
+          tool: "read",
+          toolCallId: "call-1",
+          state: {
+            status: "completed",
+            output: "done",
+            time: { start: 1, end: 2 },
+          },
+        });
+      }
+    }),
+  );
+
   it.effect("writes provider-native observability records using the session thread id", () =>
     Effect.gen(function* () {
       const nativeEvents: Array<{

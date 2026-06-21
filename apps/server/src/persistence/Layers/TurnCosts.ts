@@ -112,6 +112,8 @@ const makeTurnCostRepository = Effect.gen(function* () {
       totalCostUsd: Schema.Number,
       totalInputTokens: Schema.Int,
       totalOutputTokens: Schema.Int,
+      totalCachedInputTokens: Schema.Int,
+      totalReasoningTokens: Schema.Int,
     }),
     execute: ({ projectId }) =>
       sql`
@@ -119,9 +121,59 @@ const makeTurnCostRepository = Effect.gen(function* () {
           CAST(COUNT(*) AS INTEGER) AS "totalTurns",
           COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
           COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
-          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens",
+          COALESCE(SUM(cached_input_tokens), 0) AS "totalCachedInputTokens",
+          COALESCE(SUM(reasoning_tokens), 0) AS "totalReasoningTokens"
         FROM projection_turn_costs
         WHERE project_id = ${projectId}
+      `,
+  });
+
+  const aggregateTurnCostsByProviderAll = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: Schema.Struct({
+      provider: Schema.String,
+      totalTurns: Schema.Int,
+      totalCostUsd: Schema.Number,
+      totalInputTokens: Schema.Int,
+      totalOutputTokens: Schema.Int,
+    }),
+    execute: () =>
+      sql`
+        SELECT
+          provider,
+          CAST(COUNT(*) AS INTEGER) AS "totalTurns",
+          COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
+          COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+        FROM projection_turn_costs
+        WHERE provider IS NOT NULL
+        GROUP BY provider
+        ORDER BY "totalCostUsd" DESC
+      `,
+  });
+
+  const aggregateTurnCostsByModelAll = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: Schema.Struct({
+      model: Schema.String,
+      totalTurns: Schema.Int,
+      totalCostUsd: Schema.Number,
+      totalInputTokens: Schema.Int,
+      totalOutputTokens: Schema.Int,
+    }),
+    execute: () =>
+      sql`
+        SELECT
+          model,
+          CAST(COUNT(*) AS INTEGER) AS "totalTurns",
+          COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
+          COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+        FROM projection_turn_costs
+        WHERE model IS NOT NULL
+        GROUP BY model
+        ORDER BY "totalCostUsd" DESC
       `,
   });
 
@@ -147,6 +199,8 @@ const makeTurnCostRepository = Effect.gen(function* () {
       totalCostUsd: Schema.Number,
       totalInputTokens: Schema.Int,
       totalOutputTokens: Schema.Int,
+      totalCachedInputTokens: Schema.Int,
+      totalReasoningTokens: Schema.Int,
     }),
     execute: () =>
       sql`
@@ -154,7 +208,9 @@ const makeTurnCostRepository = Effect.gen(function* () {
           CAST(COUNT(*) AS INTEGER) AS "totalTurns",
           COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
           COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
-          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens",
+          COALESCE(SUM(cached_input_tokens), 0) AS "totalCachedInputTokens",
+          COALESCE(SUM(reasoning_tokens), 0) AS "totalReasoningTokens"
         FROM projection_turn_costs
       `,
   });
@@ -168,12 +224,24 @@ const makeTurnCostRepository = Effect.gen(function* () {
     Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateAll:query")),
   );
 
+  const aggregateByProviderAll: TurnCostRepositoryShape["aggregateByProviderAll"] =
+    aggregateTurnCostsByProviderAll({}).pipe(
+      Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByProviderAll:query")),
+    );
+
+  const aggregateByModelAll: TurnCostRepositoryShape["aggregateByModelAll"] =
+    aggregateTurnCostsByModelAll({}).pipe(
+      Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByModelAll:query")),
+    );
+
   return {
     insert,
     listByThreadId,
     listByProjectId,
     aggregateByProject,
     aggregateAll,
+    aggregateByProviderAll,
+    aggregateByModelAll,
   } satisfies TurnCostRepositoryShape;
 });
 

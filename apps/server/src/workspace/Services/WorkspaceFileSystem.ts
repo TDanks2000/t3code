@@ -10,7 +10,13 @@ import * as Schema from "effect/Schema";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
-import type { ProjectWriteFileInput, ProjectWriteFileResult } from "@t3tools/contracts";
+import type {
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
+  WorkspaceReadTextFileResult,
+  WorkspaceWriteTextFileInput,
+  WorkspaceWriteTextFileResult,
+} from "@t3tools/contracts";
 import { WorkspacePathOutsideRootError } from "./WorkspacePaths.ts";
 
 export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceFileSystemError>()(
@@ -40,6 +46,28 @@ export interface WorkspaceFileSystemShape {
     ProjectWriteFileResult,
     WorkspaceFileSystemError | WorkspacePathOutsideRootError
   >;
+
+  /**
+   * Read a text file relative to the workspace root. Returns a typed result
+   * encoding all failure modes (not_found, too_large, binary, unsupported, error)
+   * without leaking internal error details to the caller. The Effect never
+   * fails — every outcome (including unexpected errors) is a success variant.
+   */
+  readonly readTextFile: (
+    cwd: string,
+    relativePath: string,
+  ) => Effect.Effect<WorkspaceReadTextFileResult>;
+
+  /**
+   * Write a text file relative to the workspace root. Returns a typed result
+   * encoding all failure modes (conflict, too_large, unsupported, not_found, error).
+   * Only supports writing existing text-like files — does not create new files.
+   * The Effect never fails — every outcome is a success variant.
+   */
+  readonly writeTextFile: (
+    cwd: string,
+    input: WorkspaceWriteTextFileInput,
+  ) => Effect.Effect<WorkspaceWriteTextFileResult>;
 }
 
 /**

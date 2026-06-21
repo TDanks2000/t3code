@@ -2,7 +2,7 @@ import type { ActivePlanState } from "~/session-logic";
 import type { ProviderDriverKind, RuntimeMode, ProviderInteractionMode } from "@t3tools/contracts";
 import type { ProviderRateLimitSnapshot } from "~/lib/rateLimits";
 import { formatRateLimitPercent, formatResetsAt } from "~/lib/rateLimits";
-import { SquareIcon, GaugeIcon } from "lucide-react";
+import { SquareIcon, GaugeIcon, WrenchIcon } from "lucide-react";
 import { memo } from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
@@ -17,6 +17,7 @@ interface StickyRunHeaderProps {
   activePlanCompletedSteps: number;
   activePlanTotalSteps: number;
   rateLimit: ProviderRateLimitSnapshot | null;
+  toolCallCount?: number;
   onInterrupt: () => void;
 }
 
@@ -30,11 +31,11 @@ export const StickyRunHeader = memo(function StickyRunHeader({
   activePlanCompletedSteps,
   activePlanTotalSteps,
   rateLimit,
+  toolCallCount = 0,
   onInterrupt,
 }: StickyRunHeaderProps) {
-  if (!isWorking && phase !== "running") return null;
-
   const isRunning = isWorking || phase === "running";
+  if (!isRunning && toolCallCount === 0) return null;
 
   return (
     <div
@@ -43,44 +44,33 @@ export const StickyRunHeader = memo(function StickyRunHeader({
         isRunning ? "border-primary/20 bg-primary/[0.04]" : "border-border/40 bg-muted/20",
       )}
     >
-      {/* Status indicator */}
-      <span className="flex shrink-0 items-center gap-1.5">
-        <span className="relative flex size-2">
-          {isRunning ? (
-            <>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
-              <span className="relative inline-flex size-2 rounded-full bg-primary" />
-            </>
-          ) : (
-            <span className="inline-flex size-2 rounded-full bg-muted-foreground/30" />
-          )}
+      {/* Status indicator — only shown while running */}
+      {isRunning && (
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
+            <span className="relative inline-flex size-2 rounded-full bg-primary" />
+          </span>
+          <span className="font-medium tabular-nums text-primary">Running</span>
         </span>
-        <span
-          className={cn(
-            "font-medium tabular-nums",
-            isRunning ? "text-primary" : "text-muted-foreground/70",
-          )}
-        >
-          {isRunning ? "Running" : "Idle"}
-        </span>
-      </span>
+      )}
 
       {/* Provider */}
-      {provider && (
+      {isRunning && provider && (
         <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/70">
           {provider}
         </span>
       )}
 
       {/* Mode */}
-      {interactionMode && (
+      {isRunning && interactionMode && (
         <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
           {interactionMode === "plan" ? "Plan" : "Chat"}
         </span>
       )}
 
       {/* Runtime mode */}
-      {runtimeMode && (
+      {isRunning && runtimeMode && (
         <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
           {runtimeMode}
         </span>
@@ -114,6 +104,15 @@ export const StickyRunHeader = memo(function StickyRunHeader({
           {rateLimit.planType && (
             <span className="text-muted-foreground/50">{rateLimit.planType}</span>
           )}
+        </span>
+      )}
+
+      {/* Tool call count */}
+      {toolCallCount > 0 && (
+        <span className="flex shrink-0 items-center gap-1 rounded-md border border-border/40 bg-card/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+          <WrenchIcon className="size-2.5 text-muted-foreground/50" />
+          <span className="tabular-nums">{toolCallCount}</span>
+          <span className="text-muted-foreground/40">tools</span>
         </span>
       )}
 

@@ -270,11 +270,7 @@ function isInsideWorkspace(
 ): boolean {
   if (targetRealPath === workspaceRootRealPath) return false;
   const relativePath = path.relative(workspaceRootRealPath, targetRealPath);
-  return (
-    relativePath !== "" &&
-    !relativePath.startsWith("..") &&
-    !path.isAbsolute(relativePath)
-  );
+  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
 export const workspaceFileRouteLayer = HttpRouter.add(
@@ -312,16 +308,16 @@ export const workspaceFileRouteLayer = HttpRouter.add(
 
     const contentType = IMAGE_CONTENT_TYPE_BY_EXTENSION[ext] ?? "application/octet-stream";
 
-    const targetRealPath = yield* fileSystem.realPath(targetPath).pipe(
-      Effect.orElseSucceed(() => null),
-    );
+    const targetRealPath = yield* fileSystem
+      .realPath(targetPath)
+      .pipe(Effect.orElseSucceed(() => null));
     if (targetRealPath === null) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }
 
-    const workspaceRealPath = yield* fileSystem.realPath(config.cwd).pipe(
-      Effect.orElseSucceed(() => null),
-    );
+    const workspaceRealPath = yield* fileSystem
+      .realPath(config.cwd)
+      .pipe(Effect.orElseSucceed(() => null));
     if (workspaceRealPath === null) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }

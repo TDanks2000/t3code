@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open Design Canvas Workspace Plan</title>
+  <meta name="strategist-type" content="plan">
+  <meta name="strategist-slug" content="open-design-canvas-workspace">
+  <meta name="strategist-created" content="2026-06-18">
+  <meta name="strategist-status" content="ready">
+  <meta name="strategist-target" content="apps/web dedicated Open Design-style canvas workspace">
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f4f1eb;
+      --surface: #fbfaf7;
+      --panel: #f8f6f1;
+      --ink: #191713;
+      --muted: #756f65;
+      --line: #e4dfd6;
+      --grid: #eee9df;
+      --accent: #c47a58;
+      --green: #667f55;
+      --rose: #a45570;
+      --shadow: 0 18px 45px rgba(34, 27, 18, 0.11);
+      --mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    h1, h2, h3 { line-height: 1.2; color: var(--ink); }
+    h1 { margin: 0 0 18px; font-size: 34px; letter-spacing: 0; }
+    h2 { margin: 34px 0 12px; font-size: 22px; }
+    h3 { margin: 22px 0 10px; font-size: 16px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    code, pre {
+      font-family: var(--mono);
+      background: #fffaf2;
+      color: #2b2720;
+    }
+    code { padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+    pre {
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+    section {
+      border-top: 1px solid var(--line);
+      padding-top: 18px;
+    }
+    ul, ol { color: var(--muted); padding-left: 22px; }
+    li { margin: 6px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      color: var(--muted);
+      background: var(--surface);
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--ink); background: #f1ece3; }
+    .callout {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 12px 0;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.8);
+    }
+    .decision { border-left: 3px solid var(--accent); }
+    .risk { border-left: 3px solid #d8aa41; }
+    .blueprint {
+      border: 1px solid #d9d3c8;
+      background: #eee9df;
+      border-radius: 12px;
+      padding: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .od-shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 620px;
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .od-left {
+      position: relative;
+      display: grid;
+      grid-template-rows: 52px 1fr 122px;
+      border-right: 1px solid var(--line);
+      background: #f8f5ee;
+      min-width: 0;
+    }
+    .od-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+    }
+    .od-logo {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid #d8d0c3;
+      border-radius: 9px;
+      background: #fffdfa;
+      color: var(--accent);
+      font-size: 16px;
+    }
+    .od-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .od-caret { font-size: 11px; color: var(--muted); }
+    .od-context {
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 16px;
+      padding: 20px 28px;
+      text-align: center;
+    }
+    .od-context h3 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: 24px;
+      font-weight: 500;
+    }
+    .od-context p {
+      max-width: 190px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .od-context-list {
+      width: 100%;
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .od-context-button {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #ddd6ca;
+      border-radius: 999px;
+      background: #fffdfa;
+      padding: 0 12px;
+      box-shadow: 0 2px 8px rgba(34, 27, 18, 0.05);
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .od-context-button span:first-child {
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 13px;
+    }
+    .od-context-button.design span:first-child { background: var(--accent); }
+    .od-context-button.screenshot span:first-child { background: var(--green); }
+    .od-context-button.figma span:first-child { background: var(--rose); }
+    .od-composer {
+      margin: 8px;
+      border: 1px solid #d8d0c3;
+      border-radius: 12px;
+      background: #fffdfa;
+      box-shadow: 0 7px 22px rgba(34, 27, 18, 0.12);
+      display: grid;
+      grid-template-rows: 1fr 34px;
+      padding: 10px;
+    }
+    .od-placeholder { color: #716a61; font-size: 14px; }
+    .od-composer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .od-mini-actions { display: flex; gap: 6px; }
+    .od-icon-btn {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fffdfa;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .od-model { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .od-send {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      border: 1px solid #b86848;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 0 13px;
+      font-size: 12px;
+      box-shadow: 0 2px 6px rgba(196, 122, 88, 0.32);
+    }
+    .od-main {
+      display: grid;
+      grid-template-rows: 52px minmax(0, 1fr);
+      min-width: 0;
+      background: var(--surface);
+    }
+    .od-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 12px 0 20px;
+      background: #fffdfa;
+    }
+    .od-file {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .od-top-actions { display: flex; align-items: center; gap: 8px; }
+    .od-share {
+      border: 0;
+      border-radius: 7px;
+      background: #111;
+      color: white;
+      height: 28px;
+      padding: 0 12px;
+      font-size: 12px;
+    }
+    .od-avatar {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: #e3d9c8;
+      color: #4f473b;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .od-canvas {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        #fbfaf7;
+      background-size: 38px 38px;
+    }
+    .od-artifact-frame {
+      position: absolute;
+      left: 90px;
+      top: 78px;
+      width: min(760px, calc(100% - 180px));
+      min-height: 410px;
+      border: 1px solid #d7d0c5;
+      border-radius: 14px;
+      background: white;
+      box-shadow: 0 24px 70px rgba(34, 27, 18, 0.15);
+      display: grid;
+      grid-template-rows: 42px 1fr;
+    }
+    .od-artifact-frame header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .od-preview {
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 28px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      padding: 5px 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 860px) {
+      .od-shell { grid-template-columns: 1fr; }
+      .od-left { min-height: 420px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .od-main { min-height: 520px; }
+      .od-artifact-frame {
+        left: 20px;
+        top: 40px;
+        width: calc(100% - 40px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Open Design Canvas Workspace Plan</h1>
+
+    <section id="tldr">
+      <h2>TL;DR</h2>
+      <p>Revise the feature direction: do not make this feel like a T3 Code chat with a preview side panel. Build a dedicated Open Design / Claude Design-style workspace route with a left context rail, full-grid canvas, top file/share bar, and floating bottom-left prompt composer. The existing chat/thread/provider engine should power it, but the UI should look and behave like a design canvas.</p>
+      <p>The first implementation should create a design workspace shell that can launch agent runs, bind context inputs, show generated artifacts as canvas frames, and keep the familiar Open Design loop: context → brief → artifact → critique → update/export.</p>
+    </section>
+
+    <section id="goal">
+      <h2>1. Goal</h2>
+      <p>Build a T3 Code-native version of Open Design that visually and behaviorally tracks the screenshot: a calm canvas-first UI where users start by adding context, then describe what they want to create, then watch an artifact appear on the grid. The workspace should feel closer to Claude Design/Open Design than to the existing T3 Code chat interface.</p>
+      <div class="badge-row">
+        <span class="badge">Left context rail</span>
+        <span class="badge">Grid canvas</span>
+        <span class="badge">Top file bar</span>
+        <span class="badge">Bottom-left composer</span>
+        <span class="badge">Artifact frames</span>
+        <span class="badge">Agent-backed generation</span>
+      </div>
+    </section>
+
+    <section id="codebase-understanding">
+      <h2>2. Codebase Understanding</h2>
+      <ul>
+        <li>T3 Code already has the hard part: provider sessions, thread state, composer draft state, file links, model selection, attachments, terminal/runtime mode, and WebSocket orchestration.</li>
+        <li>The current primary chat UI lives in <code>apps/web/src/components/ChatView.tsx</code>. This should be reused as behavior reference, not as the visual layout for this feature.</li>
+        <li>Routing is TanStack Router under <code>apps/web/src/routes</code>. This feature should likely become a dedicated route such as <code>/design</code>, <code>/design/$designId</code>, or a project-scoped design route.</li>
+        <li>The composer implementation in <code>apps/web/src/components/chat/ChatComposer.tsx</code> has reusable dispatch ideas but is visually too chat-oriented. Extract behavior or create design-specific components instead of forcing the existing footer into the screenshot layout.</li>
+        <li><code>apps/web/src/components/ui/*</code> includes buttons, dialogs, menus, sheets, select, input, textarea, and tooltip primitives that can implement the screenshot without new UI dependencies.</li>
+        <li><code>apps/web/src/composerDraftStore.ts</code> and <code>apps/web/src/store.ts</code> are relevant for draft/thread continuity.</li>
+        <li>Open Design's public model centers on context sources, design systems, prompt skills, sandboxed iframe previews, and exportable HTML artifacts. This plan adapts that model to T3 Code's existing local provider/session engine.</li>
+      </ul>
+    </section>
+
+    <section id="recommendation">
+      <h2>3. Recommendation</h2>
+      <div class="callout decision">
+        <p><strong>Replace the earlier "right preview panel" plan with a dedicated design workspace route.</strong> A side panel would not satisfy the requested Open Design / Claude Design feel. Build a separate canvas surface that internally uses T3 Code threads.</p>
+      </div>
+      <p>Do this in two execution slices. Slice 1 builds the shell, composer, context buttons, prompt construction, artifact frame, and generated HTML preview. Slice 2 adds richer Open Design parity such as selectable templates/skills, multi-artifact canvas layout, version history, and file-level critique tools.</p>
+    </section>
+
+    <section id="scope">
+      <h2>4. Scope</h2>
+      <h3>In Scope</h3>
+      <ul>
+        <li>A dedicated Open Design-style route or mode.</li>
+        <li>Left sidebar with title row and "Start with context" actions: Design system, Screenshot, Figma.</li>
+        <li>Bottom-left floating composer with attach button, optional voice/tool button, model selector, and Send button.</li>
+        <li>Large right canvas with subtle grid background, top file selector, Share button, and account avatar.</li>
+        <li>Artifact frame rendering generated HTML in a sandboxed iframe on the canvas.</li>
+        <li>Prompt construction that tells the agent to generate/update a real HTML artifact under a stable project path.</li>
+        <li>State model for open file, selected artifact, context inputs, and generation state.</li>
+        <li>Focused tests for pure state/prompt/artifact logic.</li>
+      </ul>
+      <h3>Out of Scope For Slice 1</h3>
+      <ul>
+        <li>Full Open Design plugin marketplace.</li>
+        <li>Full Figma OAuth/API integration. The Figma button can open a paste/import dialog or disabled setup state first.</li>
+        <li>Video, HyperFrames, PPTX/PDF export, image model routing, or hosted BYOK proxy.</li>
+        <li>Multi-user sharing backend. The Share button can start as Copy Link / Export actions unless sharing already exists.</li>
+        <li>Replacing the existing T3 Code chat UI.</li>
+      </ul>
+    </section>
+
+    <section id="blueprint">
+      <h2>Blueprint UI</h2>
+      <p>This is the target visual structure. The implementation should look much closer to this than to a normal T3 Code chat thread.</p>
+
+      <div class="blueprint">
+        <div class="od-shell">
+          <aside class="od-left">
+            <div class="od-brand">
+              <div class="od-logo">◉</div>
+              <div class="od-title">Untitled</div>
+              <div class="od-caret">⌄</div>
+            </div>
+
+            <div class="od-context">
+              <div>
+                <h3>Start with context</h3>
+                <p>Designs grounded in real context turn out better.</p>
+              </div>
+              <div class="od-context-list">
+                <div class="od-context-button design"><span>▣</span>Design system</div>
+                <div class="od-context-button screenshot"><span>▧</span>Screenshot</div>
+                <div class="od-context-button figma"><span>▤</span>Figma</div>
+              </div>
+            </div>
+
+            <div class="od-composer">
+              <div class="od-placeholder">Describe what you want to create...</div>
+              <div class="od-composer-row">
+                <div class="od-mini-actions">
+                  <div class="od-icon-btn">＋</div>
+                  <div class="od-icon-btn">≋</div>
+                </div>
+                <div class="od-model">Opus 4.8⌄</div>
+                <button class="od-send">▷ Send</button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="od-main">
+            <header class="od-topbar">
+              <div class="od-file">No file open <span class="od-caret">⌄</span></div>
+              <div class="od-top-actions">
+                <button class="od-share">Share</button>
+                <div class="od-avatar">T</div>
+              </div>
+            </header>
+
+            <div class="od-canvas">
+              <div class="od-artifact-frame">
+                <header>
+                  <span>design-artifacts/landing-page.html</span>
+                  <span>Preview · Export · Open</span>
+                </header>
+                <div class="od-preview">
+                  Generated artifact appears here in a sandboxed iframe.<br>
+                  Empty canvas before the first send.
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <h3>Route-Level Markup Skeleton</h3>
+      <pre><code>&lt;DesignWorkspaceRoute&gt;
+  &lt;DesignWorkspaceShell&gt;
+    &lt;DesignContextRail
+      title={workspaceTitle}
+      contextSources={contextSources}
+      draft={draft}
+      modelSelection={modelSelection}
+      isGenerating={isGenerating}
+      onContextAction={openContextDialog}
+      onDraftChange={setDraft}
+      onModelChange={setModelSelection}
+      onSend={sendDesignBrief}
+    /&gt;
+
+    &lt;DesignCanvasArea
+      openFile={selectedArtifact}
+      artifacts={artifacts}
+      selectedArtifactId={selectedArtifactId}
+      isGenerating={isGenerating}
+      onSelectArtifact={setSelectedArtifactId}
+      onShare={openShareMenu}
+    /&gt;
+  &lt;/DesignWorkspaceShell&gt;
+&lt;/DesignWorkspaceRoute&gt;</code></pre>
+
+      <h3>Left Rail Skeleton</h3>
+      <pre><code>&lt;aside className="grid h-full w-[19.5rem] grid-rows-[3.5rem_1fr_auto] border-r bg-[#f8f5ee]"&gt;
+  &lt;header className="flex items-center gap-2 px-3"&gt;
+    &lt;Button size="icon-sm" variant="outline" aria-label="Open workspace menu"&gt;
+      &lt;PaletteIcon className="size-4 text-[#c47a58]" /&gt;
+    &lt;/Button&gt;
+    &lt;button type="button" className="inline-flex items-center gap-1 text-sm font-medium"&gt;
+      {workspaceTitle}
+      &lt;ChevronDownIcon className="size-3" /&gt;
+    &lt;/button&gt;
+  &lt;/header&gt;
+
+  &lt;section className="grid place-items-center px-8 text-center"&gt;
+    &lt;div className="grid gap-4"&gt;
+      &lt;div&gt;
+        &lt;h1 className="font-serif text-2xl font-normal"&gt;Start with context&lt;/h1&gt;
+        &lt;p className="mt-1 text-xs text-muted-foreground"&gt;
+          Designs grounded in real context turn out better.
+        &lt;/p&gt;
+      &lt;/div&gt;
+      &lt;ContextSourceButton kind="design-system" label="Design system" /&gt;
+      &lt;ContextSourceButton kind="screenshot" label="Screenshot" /&gt;
+      &lt;ContextSourceButton kind="figma" label="Figma" /&gt;
+    &lt;/div&gt;
+  &lt;/section&gt;
+
+  &lt;DesignPromptComposer
+    value={draft.prompt}
+    modelSelection={modelSelection}
+    attachments={draft.attachments}
+    isGenerating={isGenerating}
+    onChange={setPrompt}
+    onSend={sendDesignBrief}
+  /&gt;
+&lt;/aside&gt;</code></pre>
+
+      <h3>Canvas Skeleton</h3>
+      <pre><code>&lt;section className="grid min-w-0 flex-1 grid-rows-[3.5rem_1fr] rounded-l-xl bg-[#fbfaf7]"&gt;
+  &lt;header className="flex items-center justify-between border-b bg-[#fffdfa] px-5"&gt;
+    &lt;FilePicker value={selectedArtifactId} artifacts={artifacts} /&gt;
+    &lt;div className="flex items-center gap-2"&gt;
+      &lt;Button size="sm" variant="default" className="bg-black text-white"&gt;Share&lt;/Button&gt;
+      &lt;UserAvatar /&gt;
+    &lt;/div&gt;
+  &lt;/header&gt;
+
+  &lt;div className="relative overflow-auto bg-design-grid"&gt;
+    {artifacts.length === 0 ? (
+      &lt;DesignEmptyCanvas /&gt;
+    ) : (
+      &lt;DesignArtifactFrame artifact={selectedArtifact} /&gt;
+    )}
+  &lt;/div&gt;
+&lt;/section&gt;</code></pre>
+    </section>
+
+    <section id="files-to-inspect">
+      <h2>5. Files and Areas to Inspect</h2>
+      <ul>
+        <li><code>apps/web/src/router.ts</code> and <code>apps/web/src/routes/*</code> for adding a dedicated design workspace route.</li>
+        <li><code>apps/web/src/components/AppSidebarLayout.tsx</code> and <code>apps/web/src/routes/dashboard.tsx</code> for top-level app shell integration.</li>
+        <li><code>apps/web/src/components/ChatView.tsx</code> for provider/thread dispatch behavior to reuse.</li>
+        <li><code>apps/web/src/components/chat/ChatComposer.tsx</code>, <code>ComposerPrimaryActions.tsx</code>, and model picker components for behavior that can be adapted to the smaller bottom-left composer.</li>
+        <li><code>apps/web/src/composerDraftStore.ts</code> for draft persistence patterns.</li>
+        <li><code>apps/web/src/store.ts</code>, <code>apps/web/src/storeSelectors.ts</code>, and <code>packages/client-runtime/src/threadDetailState.ts</code> for thread data integration.</li>
+        <li><code>packages/contracts/src/project.ts</code> and server project file APIs if artifact file reads need a typed endpoint.</li>
+        <li><code>apps/web/src/components/ui/button.tsx</code>, <code>dialog.tsx</code>, <code>menu.tsx</code>, <code>select.tsx</code>, <code>textarea.tsx</code>, and <code>tooltip.tsx</code> for UI primitives.</li>
+      </ul>
+    </section>
+
+    <section id="implementation-plan">
+      <h2>6. Implementation Plan</h2>
+      <ol>
+        <li><strong>Create design workspace state and helpers.</strong> Add a module such as <code>apps/web/src/designWorkspace/designWorkspaceState.ts</code> with pure types and functions for workspace title, context sources, prompt draft, artifact metadata, selected file, and generation state.</li>
+        <li><strong>Add prompt construction for Open Design parity.</strong> Add <code>buildDesignWorkspacePrompt</code>. It should include selected context, design-system text, screenshot notes, Figma link/import notes, target artifact path, and a contract requiring a single-file HTML output plus a short completion summary.</li>
+        <li><strong>Add a dedicated route.</strong> Create a route like <code>apps/web/src/routes/design.tsx</code> or project-scoped equivalent. The route should render the canvas UI directly, not embed <code>ChatView</code>.</li>
+        <li><strong>Build <code>DesignWorkspaceShell</code>.</strong> Implement the two-column shell with fixed left rail and flexible canvas. Match the screenshot proportions: about 300-316px left rail, rounded large canvas container, warm off-white surfaces, subtle grid background, and compact top bar.</li>
+        <li><strong>Build <code>DesignContextRail</code>.</strong> Include the title row, centered "Start with context" block, three pill actions, and bottom prompt composer. Context buttons should open dialogs or setup states. Screenshot should support image attachment if existing composer attachment code can be reused safely.</li>
+        <li><strong>Build <code>DesignPromptComposer</code>.</strong> Make it a compact card pinned to the bottom of the left rail. Include textarea, attach button, tool/voice placeholder button, model selector, and Send button. Reuse model selection logic where possible, but avoid pulling in the full chat footer UI.</li>
+        <li><strong>Build <code>DesignCanvasArea</code>.</strong> Add top file selector, Share button, avatar, grid canvas, empty state, generating state, and artifact frame state. Empty canvas should stay mostly blank like the screenshot.</li>
+        <li><strong>Build <code>DesignArtifactFrame</code>.</strong> Render generated HTML in a sandboxed iframe. Add small frame toolbar actions: Preview, Export HTML, Open in editor. Keep artifact chrome minimal so the canvas remains visually dominant.</li>
+        <li><strong>Connect to existing agent dispatch.</strong> Use the current project/thread/provider mechanisms from <code>ChatView</code> as reference. Prefer creating or reusing a thread behind the design workspace so runs still appear in existing session history. The design route can hide chat messages by default and only surface artifact/progress state.</li>
+        <li><strong>Implement artifact discovery and reading.</strong> Rank generated HTML files from the latest turn diff and explicit prompt target path. Read the file safely from the active project/worktree. Add a minimal typed read endpoint only if no existing project file read path exists.</li>
+        <li><strong>Add context dialogs.</strong> Design system: textarea or file picker for <code>DESIGN.md</code>-style context. Screenshot: image attachment. Figma: URL/token placeholder dialog with clear disabled/setup messaging if full import is not implemented in Slice 1.</li>
+        <li><strong>Add tests.</strong> Cover prompt construction, artifact candidate ranking, context source state transitions, and target path validation. Add component smoke tests for the shell if the existing web test setup supports it.</li>
+      </ol>
+    </section>
+
+    <section id="quality-rules">
+      <h2>7. Code Quality Rules</h2>
+      <ul>
+        <li>Do not force the existing chat layout to look like Open Design. Build a dedicated design workspace surface.</li>
+        <li>Reuse provider/session behavior, not chat visuals.</li>
+        <li>Keep generated HTML sandboxed in an iframe.</li>
+        <li>Extract pure logic for prompt construction, path validation, and artifact discovery.</li>
+        <li>No <code>any</code>, no unsafe casts, and no schema weakening.</li>
+        <li>Use existing UI primitives and lucide icons.</li>
+        <li>Keep the palette warm, restrained, and close to the screenshot, while still using project tokens where practical.</li>
+        <li>Do not add external UI libraries.</li>
+      </ul>
+    </section>
+
+    <section id="validation">
+      <h2>8. Testing and Validation</h2>
+      <ul>
+        <li>Run <code>vp check</code>.</li>
+        <li>Run <code>vp run typecheck</code>.</li>
+        <li>Run focused web tests for changed design workspace helpers/components.</li>
+        <li>Run <code>vp test</code> if focused test selection is unclear.</li>
+        <li>Manual QA desktop at 1920x1080: the layout should visually match the supplied screenshot.</li>
+        <li>Manual QA laptop width around 1280px: left rail remains usable and canvas does not overflow horizontally.</li>
+        <li>Manual QA mobile/narrow width: stack or adapt the rail/canvas without overlapping text.</li>
+        <li>Manual QA generation loop: context → prompt → run → artifact appears → refine → artifact updates.</li>
+      </ul>
+    </section>
+
+    <section id="acceptance-criteria">
+      <h2>9. Acceptance Criteria</h2>
+      <ul>
+        <li>The user can open a dedicated design workspace that looks like the screenshot: left context rail, bottom-left composer, top file/share bar, and full grid canvas.</li>
+        <li>The first empty state says "Start with context" and offers Design system, Screenshot, and Figma actions.</li>
+        <li>The composer accepts a design brief, model selection is visible, and Send starts an agent-backed generation run.</li>
+        <li>The generated artifact appears on the canvas as a framed sandboxed HTML preview.</li>
+        <li>The top file selector reflects the open artifact or "No file open".</li>
+        <li>The feature preserves T3 Code's existing provider/session reliability rather than creating a parallel untracked execution path.</li>
+        <li><code>vp check</code> and <code>vp run typecheck</code> pass.</li>
+      </ul>
+    </section>
+
+    <section id="risks">
+      <h2>10. Risks and Notes</h2>
+      <div class="callout risk">
+        <p><strong>Main risk:</strong> copying only the visual shell without using T3 Code's existing session engine would create a fragile parallel product. The implementation must keep execution rooted in the current provider/thread infrastructure.</p>
+      </div>
+      <ul>
+        <li><strong>Security:</strong> generated HTML is untrusted. Keep sandboxing strict and never inject it directly into app DOM.</li>
+        <li><strong>Scope:</strong> "basically identical to Open Design" is too large for one slice. Build visual parity and the core artifact loop first.</li>
+        <li><strong>Figma:</strong> real Figma import likely needs auth and API handling. Start with URL/context capture unless credentials and backend patterns already exist.</li>
+        <li><strong>Navigation:</strong> decide whether design workspaces are per project, per thread, or standalone. Prefer project-scoped for artifact file safety.</li>
+        <li><strong>Persistence:</strong> design workspace state should survive route changes and reloads enough to avoid losing prompts/context.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

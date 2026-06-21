@@ -628,7 +628,19 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             ),
           ).pipe(
             Effect.catch((cause) =>
-              Effect.logError("Failed to process Grok runtime notification.", { cause }),
+              Effect.gen(function* () {
+                yield* Effect.logError("Failed to process Grok runtime notification.", { cause });
+                yield* offerRuntimeEvent({
+                  type: "runtime.error",
+                  ...(yield* makeEventStamp()),
+                  provider: PROVIDER,
+                  threadId: ctx.threadId,
+                  payload: {
+                    message: "Grok runtime notification processing failed.",
+                    class: "provider_error",
+                  },
+                });
+              }).pipe(Effect.ignore),
             ),
             Effect.forkChild,
           );
@@ -877,6 +889,16 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             ),
           ),
         );
+        yield* offerRuntimeEvent({
+          type: "turn.aborted",
+          ...(yield* makeEventStamp()),
+          provider: PROVIDER,
+          threadId,
+          turnId: ctx.activeTurnId,
+          payload: {
+            reason: "Interrupted by user.",
+          },
+        });
       });
 
     const respondToRequest: GrokAdapterShape["respondToRequest"] = (

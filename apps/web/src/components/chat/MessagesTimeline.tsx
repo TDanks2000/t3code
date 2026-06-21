@@ -1643,7 +1643,9 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       </div>
 
       {/* Image previews */}
-      {workEntry.imagePreviews && workEntry.imagePreviews.length > 0 && ctx.environmentHttpBaseUrl ? (
+      {workEntry.imagePreviews &&
+      workEntry.imagePreviews.length > 0 &&
+      ctx.environmentHttpBaseUrl ? (
         <div
           className="ml-7 mt-1.5 grid grid-cols-2 gap-1.5"
           onClick={stopRowToggle}

@@ -20,4 +20,6 @@ Each entry is a self-contained plan, audit, or investigation an agent can execut
 
 <!-- newest first; one line per run -->
 
+- 2026-06-18 · plan · [open-design-canvas-workspace](plans/2026-06-18-open-design-canvas-workspace/plan.html) — build a dedicated Open Design-style canvas workspace
+- 2026-06-18 · plan · [open-design-workspace](plans/2026-06-18-open-design-workspace/plan.html) — add a focused Open Design-style artifact workflow to T3 Code
 - 2026-06-14 · audit · [bugs-and-improvements](audits/2026-06-14-bugs-and-improvements/audit.html) — audit of T3 Code for bugs and improvement opportunities

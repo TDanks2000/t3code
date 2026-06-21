@@ -1388,6 +1388,53 @@ describe("deriveWorkLogEntries", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["tool-1-complete", "tool-2-complete"]);
   });
 
+  it("keeps separate OpenCode tool rows when stable call ids are present", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "opencode-tool-1",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.completed",
+        summary: "read",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "read",
+          detail: "done",
+          data: {
+            tool: "read",
+            toolCallId: "call-1",
+            state: {
+              status: "completed",
+              output: "done",
+            },
+          },
+        },
+      }),
+      makeActivity({
+        id: "opencode-tool-2",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "read",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "read",
+          detail: "done",
+          data: {
+            tool: "read",
+            toolCallId: "call-2",
+            state: {
+              status: "completed",
+              output: "done",
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+
+    expect(entries.map((entry) => entry.id)).toEqual(["opencode-tool-1", "opencode-tool-2"]);
+  });
+
   it("collapses same-timestamp lifecycle rows even when completed sorts before updated by id", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

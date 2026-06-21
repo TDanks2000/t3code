@@ -61,6 +61,14 @@ const rpcClientMock = {
   filesystem: {
     browse: vi.fn(),
   },
+  diagnostics: {
+    run: vi.fn(),
+  },
+  workspace: {
+    getFileTree: vi.fn(),
+    readTextFile: vi.fn(),
+    writeTextFile: vi.fn(),
+  },
   sourceControl: {
     lookupRepository: vi.fn(),
     cloneRepository: vi.fn(),
@@ -86,6 +94,11 @@ const rpcClientMock = {
     runStackedAction: vi.fn(),
     resolvePullRequest: vi.fn(),
     preparePullRequestThread: vi.fn(),
+  },
+  gitReview: {
+    getStatus: vi.fn(),
+    getFileDiff: vi.fn(),
+    revertFile: vi.fn(),
   },
   review: {
     getDiffPreview: vi.fn(),

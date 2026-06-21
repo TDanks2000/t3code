@@ -48,6 +48,7 @@ const DEFAULT_SUBSCRIPTION_RETRY_DELAY = Duration.millis(250);
 const NOOP: () => void = () => undefined;
 
 interface TransportSession {
+  readonly sessionId: number;
   readonly clientPromise: Promise<WsRpcProtocolClient>;
   readonly clientScope: Scope.Closeable;
   readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
@@ -66,6 +67,7 @@ export class WsTransport {
   private readonly lifecycleHandlers: WsProtocolLifecycleHandlers | undefined;
   private readonly options: WsTransportOptions | undefined;
   private disposed = false;
+  private readonly disposeSignal = new AbortController();
   private hasReportedTransportDisconnect = false;
   private intentionalCloseSessionIds = new Set<number>();
   private nextSessionId = 0;
@@ -121,8 +123,8 @@ export class WsTransport {
         Effect.sync(() => {
           try {
             listener(value);
-          } catch {
-            // Ignore listener errors so the stream can finish cleanly.
+          } catch (error) {
+            this.logWarning("Stream listener error", { error: String(error) });
           }
         }),
       ),
@@ -144,16 +146,36 @@ export class WsTransport {
       Duration.fromInputUnsafe(options?.retryDelay ?? DEFAULT_SUBSCRIPTION_RETRY_DELAY),
     );
     let cancelCurrentStream: () => void = NOOP;
-    const onStreamRequestStart = (info: { readonly tag: string }) => {
-      if (
-        !hasReceivedValue ||
-        !active ||
-        (options?.tag !== undefined && info.tag !== options.tag)
-      ) {
-        return;
-      }
+    const retryAbortController = new AbortController();
+    const onStreamRequestStart = (_info: { readonly tag: string }) => {
+      // No-op. The retry loop is the single path that controls reconnection,
+      // so onResubscribe is only called there.
     };
     this.streamRequestStartListeners.add(onStreamRequestStart);
+
+    const abortAwareSleep = (ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        if (retryAbortController.signal.aborted || this.disposeSignal.signal.aborted) {
+          resolve();
+          return;
+        }
+        const onAbort = () => {
+          resolve();
+        };
+        retryAbortController.signal.addEventListener("abort", onAbort, { once: true });
+        this.disposeSignal.signal.addEventListener("abort", onAbort, { once: true });
+        Effect.runFork(
+          Effect.sleep(Duration.millis(ms)).pipe(
+            Effect.onExit(() =>
+              Effect.sync(() => {
+                retryAbortController.signal.removeEventListener("abort", onAbort);
+                this.disposeSignal.signal.removeEventListener("abort", onAbort);
+                resolve();
+              }),
+            ),
+          ),
+        );
+      });
 
     void (async () => {
       for (;;) {
@@ -223,11 +245,6 @@ export class WsTransport {
               `Escalating to full reconnect after ${this.consecutiveSubscriptionFailures} consecutive subscription failures`,
               { error: formattedError },
             );
-            // Await the reconnect before clearing the failure counters so we
-            // don't reset them (and let a sibling subscription trigger a second
-            // overlapping reconnect) while the session swap is still in flight.
-            // The next loop iteration re-subscribes on whatever session is
-            // current once this resolves.
             try {
               await this.reconnect();
             } catch {
@@ -239,13 +256,14 @@ export class WsTransport {
             continue;
           }
 
-          await sleep(retryDelayMs);
+          await abortAwareSleep(retryDelayMs);
         }
       }
     })();
 
     return () => {
       active = false;
+      retryAbortController.abort();
       this.streamRequestStartListeners.delete(onStreamRequestStart);
       cancelCurrentStream();
     };
@@ -289,13 +307,16 @@ export class WsTransport {
     }
 
     this.disposed = true;
+    if (this.disposeSignal) {
+      this.disposeSignal.abort();
+    }
     await this.closeSession(this.session);
   }
 
   private closeSession(session: TransportSession) {
-    this.intentionalCloseSessionIds.add(this.activeSessionId);
+    this.intentionalCloseSessionIds.add(session.sessionId);
     return session.runtime.runPromise(Scope.close(session.clientScope, Exit.void)).finally(() => {
-      this.intentionalCloseSessionIds.delete(this.activeSessionId);
+      this.intentionalCloseSessionIds.delete(session.sessionId);
       session.runtime.dispose();
     });
   }
@@ -314,7 +335,7 @@ export class WsTransport {
         (lifecycleHandlers?.isActive?.() ?? true),
       isCloseIntentional: () =>
         this.disposed ||
-        this.intentionalCloseSessionIds.has(this.activeSessionId) ||
+        this.intentionalCloseSessionIds.has(sessionId) ||
         lifecycleHandlers?.isCloseIntentional?.() === true,
       onHeartbeatPong: () => {
         this.lastHeartbeatPongAt = performance.now();
@@ -336,6 +357,7 @@ export class WsTransport {
     const runtime = ManagedRuntime.make(rootLayer);
     const clientScope = runtime.runSync(Scope.make());
     return {
+      sessionId,
       runtime,
       clientScope,
       clientPromise: runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient)),
@@ -379,8 +401,8 @@ export class WsTransport {
               markValueReceived();
               try {
                 listener(value);
-              } catch {
-                // Ignore listener errors so the stream stays live.
+              } catch (error) {
+                this.logWarning("Stream listener error", { error: String(error) });
               }
             }),
           ),

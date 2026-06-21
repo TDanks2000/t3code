@@ -246,12 +246,17 @@ function createMockEnvironmentApi(input: {
   return {
     terminal: {} as EnvironmentApi["terminal"],
     projects: {} as EnvironmentApi["projects"],
+    diagnostics: {
+      run: () => Promise.reject(new Error("Not implemented in browser test.")),
+    },
     filesystem: {
       browse: input.browse,
     },
+    workspace: {} as EnvironmentApi["workspace"],
     sourceControl: {} as EnvironmentApi["sourceControl"],
     vcs: {} as EnvironmentApi["vcs"],
     git: {} as EnvironmentApi["git"],
+    gitReview: {} as EnvironmentApi["gitReview"],
     review: {} as EnvironmentApi["review"],
     orchestration: {
       dispatchCommand: input.dispatchCommand,

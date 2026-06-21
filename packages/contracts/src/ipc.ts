@@ -18,8 +18,24 @@ import type {
   VcsStatusInput,
   VcsStatusResult,
 } from "./git.ts";
+import type {
+  GitReviewGetStatusInput,
+  GitReviewStatusResult,
+  GitReviewGetFileDiffInput,
+  GitReviewFileDiffResult,
+  GitReviewRevertFileInput,
+  GitReviewRevertFileResult,
+} from "./gitReview.ts";
 import type { ReviewDiffPreviewInput, ReviewDiffPreviewResult } from "./review.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
+import type {
+  WorkspaceGetFileTreeResult,
+  WorkspaceReadTextFileInput,
+  WorkspaceReadTextFileResult,
+  WorkspaceWriteTextFileInput,
+  WorkspaceWriteTextFileResult,
+} from "./workspace.ts";
+import type { DiagnosticsRunInput, DiagnosticsRunResult } from "./diagnostics.ts";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -566,6 +582,11 @@ export interface EnvironmentApi {
   filesystem: {
     browse: (input: FilesystemBrowseInput) => Promise<FilesystemBrowseResult>;
   };
+  workspace: {
+    getFileTree: (input?: { readonly cwd?: string }) => Promise<WorkspaceGetFileTreeResult>;
+    readTextFile: (input: WorkspaceReadTextFileInput) => Promise<WorkspaceReadTextFileResult>;
+    writeTextFile: (input: WorkspaceWriteTextFileInput) => Promise<WorkspaceWriteTextFileResult>;
+  };
   sourceControl: {
     lookupRepository: (
       input: SourceControlRepositoryLookupInput,
@@ -600,8 +621,16 @@ export interface EnvironmentApi {
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
   };
+  gitReview: {
+    getStatus: (input: GitReviewGetStatusInput) => Promise<GitReviewStatusResult>;
+    getFileDiff: (input: GitReviewGetFileDiffInput) => Promise<GitReviewFileDiffResult>;
+    revertFile: (input: GitReviewRevertFileInput) => Promise<GitReviewRevertFileResult>;
+  };
   review: {
     getDiffPreview: (input: ReviewDiffPreviewInput) => Promise<ReviewDiffPreviewResult>;
+  };
+  diagnostics: {
+    run: (input: DiagnosticsRunInput) => Promise<DiagnosticsRunResult>;
   };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;

@@ -31,6 +31,31 @@ export const ListTurnCostsInput = Schema.Struct({
 });
 export type ListTurnCostsInput = typeof ListTurnCostsInput.Type;
 
+export interface TurnCostTotals {
+  totalTurns: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCachedInputTokens: number;
+  totalReasoningTokens: number;
+}
+
+export interface TurnCostByProvider {
+  provider: string;
+  totalTurns: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
+export interface TurnCostByModel {
+  model: string;
+  totalTurns: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
 export interface TurnCostRepositoryShape {
   readonly insert: (row: TurnCostRow) => Effect.Effect<void, ProjectionRepositoryError>;
 
@@ -42,23 +67,19 @@ export interface TurnCostRepositoryShape {
     projectId: ProjectId,
   ) => Effect.Effect<ReadonlyArray<TurnCostRow>, ProjectionRepositoryError>;
 
-  readonly aggregateByProject: (projectId: ProjectId) => Effect.Effect<
-    {
-      totalTurns: number;
-      totalCostUsd: number;
-      totalInputTokens: number;
-      totalOutputTokens: number;
-    },
+  readonly aggregateByProject: (
+    projectId: ProjectId,
+  ) => Effect.Effect<TurnCostTotals, ProjectionRepositoryError>;
+
+  readonly aggregateAll: Effect.Effect<TurnCostTotals, ProjectionRepositoryError>;
+
+  readonly aggregateByProviderAll: Effect.Effect<
+    ReadonlyArray<TurnCostByProvider>,
     ProjectionRepositoryError
   >;
 
-  readonly aggregateAll: Effect.Effect<
-    {
-      totalTurns: number;
-      totalCostUsd: number;
-      totalInputTokens: number;
-      totalOutputTokens: number;
-    },
+  readonly aggregateByModelAll: Effect.Effect<
+    ReadonlyArray<TurnCostByModel>,
     ProjectionRepositoryError
   >;
 }

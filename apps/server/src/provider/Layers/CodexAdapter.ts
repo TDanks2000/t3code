@@ -224,7 +224,7 @@ function toCanonicalItemType(raw: string | undefined | null): CanonicalItemType 
     return "file_change";
   if (type.includes("mcp")) return "mcp_tool_call";
   if (type.includes("dynamic tool")) return "dynamic_tool_call";
-  if (type.includes("collab")) return "collab_agent_tool_call";
+  if (type.includes("collab") || type.includes("sub agent")) return "collab_agent_tool_call";
   if (type.includes("web search")) return "web_search";
   if (type.includes("image")) return "image_view";
   if (type.includes("review entered")) return "review_entered";
@@ -250,6 +250,8 @@ function itemTitle(itemType: CanonicalItemType): string | undefined {
       return "File change";
     case "mcp_tool_call":
       return "MCP tool call";
+    case "collab_agent_tool_call":
+      return "Subagent";
     case "dynamic_tool_call":
       return "Tool call";
     case "web_search":
@@ -268,9 +270,17 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
     "command" in item ? item.command : undefined,
     "title" in item ? item.title : undefined,
     "summary" in item ? item.summary : undefined,
+    "query" in item ? item.query : undefined,
     "text" in item ? item.text : undefined,
     "path" in item ? item.path : undefined,
     "prompt" in item ? item.prompt : undefined,
+    "agentPath" in item ? item.agentPath : undefined,
+    "tool" in item && typeof item.tool === "string"
+      ? formatCollabAgentTool(item.tool)
+      : undefined,
+    "kind" in item && typeof item.kind === "string"
+      ? formatCollabAgentKind(item.kind)
+      : undefined,
   ];
   for (const candidate of candidates) {
     const trimmed = typeof candidate === "string" ? trimText(candidate) : undefined;
@@ -278,6 +288,36 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
     return trimmed;
   }
   return undefined;
+}
+
+function formatCollabAgentTool(tool: string): string {
+  switch (tool) {
+    case "spawnAgent":
+      return "Spawning sub-agent";
+    case "sendInput":
+      return "Sending input to sub-agent";
+    case "resumeAgent":
+      return "Resuming sub-agent";
+    case "closeAgent":
+      return "Closing sub-agent";
+    case "wait":
+      return "Waiting for sub-agent";
+    default:
+      return tool;
+  }
+}
+
+function formatCollabAgentKind(kind: string): string {
+  switch (kind) {
+    case "started":
+      return "Sub-agent started";
+    case "interacted":
+      return "Sub-agent active";
+    case "interrupted":
+      return "Sub-agent interrupted";
+    default:
+      return kind;
+  }
 }
 
 function toRequestTypeFromMethod(method: string): CanonicalRequestType {
@@ -1452,7 +1492,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                 Effect.ignoreCause({ log: true })(Scope.close(sessionScope, Exit.void)),
               ),
               Effect.andThen(Fiber.interrupt(eventFiber)),
-              Effect.ignore,
+              Effect.ignoreCause({ log: true }),
             ),
           ),
         );
@@ -1635,9 +1675,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }
     session.stopped = true;
     sessions.delete(session.threadId);
-    yield* session.runtime.close.pipe(Effect.ignore);
+    yield* session.runtime.close.pipe(Effect.ignoreCause({ log: true }));
     yield* Effect.ignoreCause({ log: true })(Scope.close(session.scope, Exit.void));
-    yield* Fiber.interrupt(session.eventFiber).pipe(Effect.ignore);
+    yield* Fiber.interrupt(session.eventFiber).pipe(Effect.ignoreCause({ log: true }));
   });
 
   const stopSession: CodexAdapterShape["stopSession"] = (threadId) =>
@@ -1669,7 +1709,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     stopAll().pipe(
       Effect.andThen(Queue.shutdown(runtimeEventQueue)),
       Effect.andThen(managedNativeEventLogger?.close() ?? Effect.void),
-      Effect.ignore,
+      Effect.ignoreCause({ log: true }),
     ),
   );
 

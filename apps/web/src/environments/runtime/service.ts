@@ -1664,6 +1664,10 @@ async function syncSavedEnvironmentConnections(
 function stopActiveService() {
   activeService?.stop();
   activeService = null;
+  for (const key of Array.from(threadDetailSubscriptions.keys())) {
+    disposeThreadDetailSubscriptionByKey(key);
+  }
+  lastAppliedProjectionVersionByEnvironment.clear();
 }
 
 function reconnectEnvironmentConnectionsAfterBrowserResume(reason: string): void {
@@ -1765,6 +1769,9 @@ export async function disconnectSavedEnvironment(environmentId: EnvironmentId): 
 
   if (connection?.kind === "saved") {
     await removeConnection(environmentId).catch(() => false);
+  }
+  if (!record) {
+    disposeThreadDetailSubscriptionsForEnvironment(environmentId);
   }
   setRuntimeDisconnected(environmentId);
 

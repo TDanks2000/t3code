@@ -1517,6 +1517,10 @@ export default function ChatView(props: ChatViewProps) {
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const phase = derivePhase(activeThread?.session ?? null);
   const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  const toolCallCount = useMemo(
+    () => threadActivities.filter((a) => a.tone === "tool").length,
+    [threadActivities],
+  );
   const workLogEntries = useMemo(() => deriveWorkLogEntries(threadActivities), [threadActivities]);
   const pendingApprovals = useMemo(
     () => derivePendingApprovals(threadActivities),
@@ -3873,6 +3877,7 @@ export default function ChatView(props: ChatViewProps) {
               }
               activePlanTotalSteps={activePlan?.steps.length ?? 0}
               rateLimit={rateLimitSnapshot}
+              toolCallCount={toolCallCount}
               onInterrupt={onInterrupt}
             />
             {/* Messages — LegendList handles virtualization and scrolling internally */}

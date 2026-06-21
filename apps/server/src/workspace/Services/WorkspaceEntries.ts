@@ -13,6 +13,7 @@ import type * as Effect from "effect/Effect";
 import type {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
+  ProjectEntry,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
 } from "@t3tools/contracts";
@@ -57,6 +58,18 @@ export interface WorkspaceEntriesShape {
   readonly search: (
     input: ProjectSearchEntriesInput,
   ) => Effect.Effect<ProjectSearchEntriesResult, WorkspaceEntriesError>;
+
+  /**
+   * Return all indexed workspace entries for the given workspace root, using
+   * the cached index. Suitable for building a full file tree without a search
+   * query.
+   */
+  readonly listAll: (
+    cwd: string,
+  ) => Effect.Effect<
+    { readonly entries: readonly ProjectEntry[]; readonly truncated: boolean },
+    WorkspaceEntriesError
+  >;
 
   /**
    * Drop any cached workspace entries for the given workspace root.

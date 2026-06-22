@@ -1607,7 +1607,11 @@ const make = Effect.gen(function* () {
           // Providers that don't embed usage in turn.completed (Codex, Grok, OpenCode, Cursor)
           // emit thread.token-usage.updated events with last-turn token counts. Use them as
           // fallback when the completion event carries no usage data.
-          if (inputTokens === 0 && outputTokens === 0 && typeof event.payload.totalCostUsd !== "number") {
+          if (
+            inputTokens === 0 &&
+            outputTokens === 0 &&
+            typeof event.payload.totalCostUsd !== "number"
+          ) {
             const cachedUsage = latestTokenUsageByThread.get(thread.id);
             if (cachedUsage) {
               inputTokens = cachedUsage.lastInputTokens ?? 0;

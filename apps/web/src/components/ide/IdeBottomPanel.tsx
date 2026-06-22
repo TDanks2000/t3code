@@ -3,6 +3,7 @@ import { TerminalIcon, TriangleAlertIcon, FlaskConicalIcon, GitBranchIcon } from
 import { cn } from "~/lib/utils";
 import { IdeProblemsPanel } from "./IdeProblemsPanel";
 import { IdeGitPanel } from "./IdeGitPanel";
+import { IdeTerminalPanel } from "./IdeTerminalPanel";
 import type { DiagnosticRunKind, EnvironmentId } from "@t3tools/contracts";
 import type { IdeProblem, IdeMissionEvidenceItem } from "./ide-types";
 import type { DiagnosticsRunState } from "./IdeShell";
@@ -119,7 +120,11 @@ export const IdeBottomPanel = ({
     <div
       role="region"
       aria-label="Bottom Panel"
-      className={cn("flex h-40 shrink-0 flex-col border-t border-border bg-card/10", className)}
+      className={cn(
+        "flex shrink-0 flex-col border-t border-border bg-card/10",
+        activeTab === "terminal" ? "h-72" : "h-40",
+        className,
+      )}
     >
       <div
         role="tablist"
@@ -144,7 +149,12 @@ export const IdeBottomPanel = ({
         tabIndex={0}
         className="flex min-h-0 flex-1 overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
-        {activeTab === "problems" ? (
+        {activeTab === "terminal" ? (
+          <IdeTerminalPanel
+            environmentId={environmentId ?? null}
+            workspaceRoot={workspaceRoot ?? null}
+          />
+        ) : activeTab === "problems" ? (
           <IdeProblemsPanel
             problems={problems ?? []}
             diagnosticsState={diagnosticsState}

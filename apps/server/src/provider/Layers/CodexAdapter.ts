@@ -275,12 +275,8 @@ function itemDetail(item: CodexLifecycleItem): string | undefined {
     "path" in item ? item.path : undefined,
     "prompt" in item ? item.prompt : undefined,
     "agentPath" in item ? item.agentPath : undefined,
-    "tool" in item && typeof item.tool === "string"
-      ? formatCollabAgentTool(item.tool)
-      : undefined,
-    "kind" in item && typeof item.kind === "string"
-      ? formatCollabAgentKind(item.kind)
-      : undefined,
+    "tool" in item && typeof item.tool === "string" ? formatCollabAgentTool(item.tool) : undefined,
+    "kind" in item && typeof item.kind === "string" ? formatCollabAgentKind(item.kind) : undefined,
   ];
   for (const candidate of candidates) {
     const trimmed = typeof candidate === "string" ? trimText(candidate) : undefined;

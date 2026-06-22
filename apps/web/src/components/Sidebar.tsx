@@ -5,7 +5,7 @@ import {
   CloudIcon,
   Code2Icon,
   FolderPlusIcon,
-  LayoutDashboardIcon,
+  PaletteIcon,
   SearchIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -1817,6 +1817,57 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     [isMobile, project, router, setOpenMobile],
   );
 
+  const handleOpenTerminalClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      const openProjectMemberInTerminal = (
+        member: Pick<SidebarProjectGroupMember, "environmentId" | "cwd">,
+      ) => {
+        void router.navigate({
+          to: "/terminal",
+          search: { environmentId: member.environmentId, workspaceRoot: member.cwd },
+        });
+      };
+
+      if (project.memberProjects.length === 1) {
+        openProjectMemberInTerminal(project.memberProjects[0]!);
+        return;
+      }
+
+      void (async () => {
+        const api = readLocalApi();
+        if (!api) {
+          openProjectMemberInTerminal(project);
+          return;
+        }
+        const clicked = await api.contextMenu.show(
+          project.memberProjects.map((member) => ({
+            id: member.physicalProjectKey,
+            label: formatProjectMemberActionLabel(member, project.groupedProjectCount),
+          })),
+          {
+            x: event.clientX,
+            y: event.clientY,
+          },
+        );
+        if (!clicked) {
+          return;
+        }
+        const targetMember = project.memberProjects.find(
+          (member) => member.physicalProjectKey === clicked,
+        );
+        if (targetMember) {
+          openProjectMemberInTerminal(targetMember);
+        }
+      })();
+    },
+    [isMobile, project, router, setOpenMobile],
+  );
+
   const attemptArchiveThread = useCallback(
     async (threadRef: ScopedThreadRef) => {
       try {
@@ -2057,7 +2108,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
           size="sm"
-          className={`gap-2 px-2 py-1.5 pr-14 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-24 ${
+          className={`gap-2 px-2 py-1.5 pr-22 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-32 ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
           }`}
           {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2120,7 +2171,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                       ? "Remote project"
                       : "Available in multiple environments"
                   }
-                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-16 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
+                  className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-24 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
                 />
               }
             >
@@ -2131,6 +2182,23 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             </TooltipPopup>
           </Tooltip>
         )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <div className="pointer-events-none absolute top-[calc(50%+1px)] right-16 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                <button
+                  type="button"
+                  aria-label={`Open terminal for ${project.displayName}`}
+                  className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                  onClick={handleOpenTerminalClick}
+                >
+                  <TerminalIcon className="size-3.5" />
+                </button>
+              </div>
+            }
+          />
+          <TooltipPopup side="top">Open terminal</TooltipPopup>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -2595,20 +2663,20 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     }
     void navigate({ to: "/settings" });
   }, [isMobile, navigate, setOpenMobile]);
-  const handleMissionBoardClick = useCallback(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    }
-    void navigate({ to: "/mission-board" });
-  }, [isMobile, navigate, setOpenMobile]);
   const handleIdeClick = useCallback(() => {
     if (isMobile) {
       setOpenMobile(false);
     }
     void navigate({ to: "/ide" });
   }, [isMobile, navigate, setOpenMobile]);
-  const onMissionBoard = pathname === "/mission-board";
+  const handleDesignClick = useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    void navigate({ to: "/design" });
+  }, [isMobile, navigate, setOpenMobile]);
   const onIde = pathname === "/ide";
+  const onDesign = pathname === "/design";
 
   return (
     <SidebarFooter className="p-2">
@@ -2619,22 +2687,22 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
           <SidebarMenuButton
             size="sm"
             className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-            onClick={handleMissionBoardClick}
-            data-active={onMissionBoard || undefined}
+            onClick={handleIdeClick}
+            data-active={onIde || undefined}
           >
-            <LayoutDashboardIcon className="size-3.5" />
-            <span className="text-xs">Mission Board</span>
+            <Code2Icon className="size-3.5" />
+            <span className="text-xs">IDE</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"
             className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-            onClick={handleIdeClick}
-            data-active={onIde || undefined}
+            onClick={handleDesignClick}
+            data-active={onDesign || undefined}
           >
-            <Code2Icon className="size-3.5" />
-            <span className="text-xs">IDE</span>
+            <PaletteIcon className="size-3.5" />
+            <span className="text-xs">Design</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>

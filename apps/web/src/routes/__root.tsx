@@ -115,7 +115,7 @@ function RootRouteView() {
     };
   }, [pathname]);
 
-  if (pathname === "/pair") {
+  if (pathname === "/pair" || pathname.startsWith("/design")) {
     return <Outlet />;
   }
 

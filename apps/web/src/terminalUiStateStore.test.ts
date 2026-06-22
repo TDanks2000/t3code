@@ -1,5 +1,9 @@
-import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime";
-import { ThreadId } from "@t3tools/contracts";
+import {
+  scopeThreadRef,
+  scopedThreadKey,
+  workspaceTerminalThreadRef,
+} from "@t3tools/client-runtime";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import {
@@ -12,6 +16,10 @@ import { DEFAULT_THREAD_TERMINAL_ID } from "./types";
 const THREAD_ID = ThreadId.make("thread-1");
 const THREAD_REF = scopeThreadRef("environment-a" as never, THREAD_ID);
 const OTHER_THREAD_REF = scopeThreadRef("environment-b" as never, THREAD_ID);
+const WORKSPACE_THREAD_REF = workspaceTerminalThreadRef({
+  environmentId: EnvironmentId.make("environment-a"),
+  workspaceRoot: "/repo/app",
+});
 
 describe("terminalUiStateStore actions", () => {
   beforeEach(() => {
@@ -152,6 +160,26 @@ describe("terminalUiStateStore actions", () => {
         OTHER_THREAD_REF,
       ).terminalIds,
     ).toEqual(["env-b-terminal"]);
+  });
+
+  it("persists workspace terminal state under the synthetic workspace owner", () => {
+    const store = useTerminalUiStateStore.getState();
+    store.setTerminalOpen(WORKSPACE_THREAD_REF, true);
+    store.newTerminal(THREAD_REF, "thread-terminal");
+
+    const workspaceTerminalUiState = selectThreadTerminalUiState(
+      useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+      WORKSPACE_THREAD_REF,
+    );
+
+    expect(workspaceTerminalUiState.terminalOpen).toBe(true);
+    expect(workspaceTerminalUiState.terminalIds).toEqual([DEFAULT_THREAD_TERMINAL_ID]);
+    expect(
+      selectThreadTerminalUiState(
+        useTerminalUiStateStore.getState().terminalUiStateByThreadKey,
+        THREAD_REF,
+      ).terminalIds,
+    ).toEqual(["thread-terminal"]);
   });
 
   it("drops persisted entries whose thread keys are not valid scoped keys", () => {

@@ -1523,9 +1523,7 @@ const makeWsRpcLayer = (currentSession: AuthenticatedSession) =>
                 turnCostRepository.aggregateByProviderAll.pipe(
                   Effect.catch(() => Effect.succeed([])),
                 ),
-                turnCostRepository.aggregateByModelAll.pipe(
-                  Effect.catch(() => Effect.succeed([])),
-                ),
+                turnCostRepository.aggregateByModelAll.pipe(Effect.catch(() => Effect.succeed([]))),
               ]);
               const agg = totals ?? emptyTotals;
               return {

@@ -17,6 +17,7 @@ export * from "./vcsActionState.ts";
 export * from "./vcsRefState.ts";
 export * from "./vcsStatusState.ts";
 export * from "./terminalSessionState.ts";
+export * from "./workspaceTerminal.ts";
 export * from "./transportError.ts";
 export * from "./wsRpcProtocol.ts";
 export * from "./wsTransport.ts";

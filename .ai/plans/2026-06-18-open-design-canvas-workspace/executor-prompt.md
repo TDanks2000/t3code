@@ -80,21 +80,24 @@ Relevant files to inspect before editing:
    - The design route should hide chat messages by default and surface progress/artifact state instead.
 
 10. Implement artifact discovery and safe file reads.
-   - Rank generated `.html` files using latest turn diff paths and explicit target path.
-   - Read artifacts from the active project/worktree.
-   - If no existing typed read method exists, add a minimal schema-backed endpoint with path normalization and traversal rejection.
+
+- Rank generated `.html` files using latest turn diff paths and explicit target path.
+- Read artifacts from the active project/worktree.
+- If no existing typed read method exists, add a minimal schema-backed endpoint with path normalization and traversal rejection.
 
 11. Add context dialogs.
-   - Design system: textarea or file picker for `DESIGN.md`-style context.
-   - Screenshot: image attachment path using existing attachment behavior if practical.
-   - Figma: URL/context dialog or disabled setup state for Slice 1 if real import is not available.
+
+- Design system: textarea or file picker for `DESIGN.md`-style context.
+- Screenshot: image attachment path using existing attachment behavior if practical.
+- Figma: URL/context dialog or disabled setup state for Slice 1 if real import is not available.
 
 12. Add tests.
-   - Prompt construction.
-   - Artifact candidate ranking.
-   - Context source state transitions.
-   - Target path validation.
-   - Component smoke tests for the workspace shell if existing test tooling supports it.
+
+- Prompt construction.
+- Artifact candidate ranking.
+- Context source state transitions.
+- Target path validation.
+- Component smoke tests for the workspace shell if existing test tooling supports it.
 
 # Constraints
 

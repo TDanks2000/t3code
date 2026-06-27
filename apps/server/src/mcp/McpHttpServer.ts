@@ -1,8 +1,10 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
@@ -10,6 +12,9 @@ import { McpSchema, McpServer, Tool } from "effect/unstable/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import packageJson from "../../package.json" with { type: "json" };
+import { ATTACHMENTS_ROUTE_PREFIX, PREVIEW_SCREENSHOTS_SUBDIR } from "../attachmentPaths.ts";
+import { createAttachmentId } from "../attachmentStore.ts";
+import { ServerConfig } from "../config.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
@@ -124,6 +129,36 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
   const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
   const built = yield* PreviewSnapshotToolkit;
   const tool = PreviewSnapshotTool;
+  const serverConfig = yield* ServerConfig;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const screenshotsDir = path.join(serverConfig.attachmentsDir, PREVIEW_SCREENSHOTS_SUBDIR);
+
+  // Persist the snapshot PNG so the UI can render it inline, returning the
+  // route-relative path the client fetches it from. Stored under a subdirectory
+  // of the attachments dir, which the attachment reapers skip (they read the
+  // root non-recursively), so message-prune never deletes it. Best-effort: a
+  // write failure must not fail the tool call the model is waiting on.
+  const persistScreenshot = (threadId: McpInvocationContext.McpInvocationScope["threadId"], data: string) =>
+    Effect.gen(function* () {
+      const id = createAttachmentId(threadId);
+      if (!id) {
+        return null;
+      }
+      yield* fileSystem.makeDirectory(screenshotsDir, { recursive: true });
+      const fileName = `${id}.png`;
+      yield* fileSystem.writeFile(
+        path.join(screenshotsDir, fileName),
+        new Uint8Array(Buffer.from(data, "base64")),
+      );
+      return `${ATTACHMENTS_ROUTE_PREFIX}/${PREVIEW_SCREENSHOTS_SUBDIR}/${fileName}`;
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to persist preview screenshot", { cause }).pipe(
+          Effect.as(null),
+        ),
+      ),
+    );
   yield* server.addTool({
     tool: new McpSchema.Tool({
       name: tool.name,
@@ -166,26 +201,30 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
                 readonly [key: string]: unknown;
               };
               const { screenshot, ...page } = snapshot;
-              const metadata = {
-                ...page,
-                screenshot: {
-                  mimeType: screenshot.mimeType,
-                  width: screenshot.width,
-                  height: screenshot.height,
-                },
-              };
-              return Effect.succeed(
-                new McpSchema.CallToolResult({
-                  isError: false,
-                  structuredContent: metadata,
-                  content: [
-                    { type: "text", text: JSON.stringify(metadata) },
-                    {
-                      type: "image",
-                      data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
+              return persistScreenshot(invocation.threadId, screenshot.data).pipe(
+                Effect.map((previewPath) => {
+                  const metadata = {
+                    ...page,
+                    screenshot: {
                       mimeType: screenshot.mimeType,
+                      width: screenshot.width,
+                      height: screenshot.height,
+                      // Route-relative path the client renders the screenshot from.
+                      ...(previewPath ? { previewPath } : {}),
                     },
-                  ],
+                  };
+                  return new McpSchema.CallToolResult({
+                    isError: false,
+                    structuredContent: metadata,
+                    content: [
+                      { type: "text", text: JSON.stringify(metadata) },
+                      {
+                        type: "image",
+                        data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
+                        mimeType: screenshot.mimeType,
+                      },
+                    ],
+                  });
                 }),
               );
             },

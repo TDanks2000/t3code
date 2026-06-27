@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { workspaceTerminalThreadRef } from "@t3tools/client-runtime";
+import { workspaceTerminalThreadRef } from "@t3tools/client-runtime/workspaceTerminal";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { nextTerminalId, resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
 import { projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 
+import { useAtomValue } from "@effect/atom-react";
+
 import { readEnvironmentApi } from "../../environmentApi";
-import { useServerKeybindings } from "../../rpc/serverState";
-import { useKnownTerminalSessions } from "../../terminalSessionState";
+import { primaryServerKeybindingsAtom } from "../../state/server";
+import { useKnownTerminalSessions } from "../../state/terminalSessions";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../../terminalUiStateStore";
 import { DEFAULT_THREAD_TERMINAL_ID, DEFAULT_THREAD_TERMINAL_HEIGHT } from "../../types";
 import ThreadTerminalDrawer from "../ThreadTerminalDrawer";
@@ -32,7 +34,7 @@ function serverTerminalIdsStrictSubsetOfClient(
 }
 
 export function IdeTerminalPanel({ environmentId, workspaceRoot }: IdeTerminalPanelProps) {
-  const keybindings = useServerKeybindings();
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const [focusRequestId, setFocusRequestId] = useState(0);
   const terminalThreadRef = useMemo(
     () =>
@@ -74,6 +76,7 @@ export function IdeTerminalPanel({ environmentId, workspaceRoot }: IdeTerminalPa
   const setTerminalOpen = useTerminalUiStateStore((state) => state.setTerminalOpen);
   const setTerminalHeight = useTerminalUiStateStore((state) => state.setTerminalHeight);
   const splitTerminalInStore = useTerminalUiStateStore((state) => state.splitTerminal);
+  const splitTerminalVerticalInStore = useTerminalUiStateStore((state) => state.splitTerminalVertical);
   const newTerminalInStore = useTerminalUiStateStore((state) => state.newTerminal);
   const setActiveTerminal = useTerminalUiStateStore((state) => state.setActiveTerminal);
   const closeTerminalInStore = useTerminalUiStateStore((state) => state.closeTerminal);
@@ -126,6 +129,13 @@ export function IdeTerminalPanel({ environmentId, workspaceRoot }: IdeTerminalPa
     splitTerminalInStore(terminalThreadRef, terminalId);
     openTerminal(terminalId);
   }, [knownTerminalIds, openTerminal, splitTerminalInStore, terminalThreadRef]);
+
+  const splitTerminalVertical = useCallback(() => {
+    if (!terminalThreadRef) return;
+    const terminalId = nextTerminalId(knownTerminalIds);
+    splitTerminalVerticalInStore(terminalThreadRef, terminalId);
+    openTerminal(terminalId);
+  }, [knownTerminalIds, openTerminal, splitTerminalVerticalInStore, terminalThreadRef]);
 
   const createNewTerminal = useCallback(() => {
     if (!terminalThreadRef) return;
@@ -205,6 +215,7 @@ export function IdeTerminalPanel({ environmentId, workspaceRoot }: IdeTerminalPa
         activeTerminalGroupId={terminalUiState.activeTerminalGroupId}
         focusRequestId={focusRequestId}
         onSplitTerminal={splitTerminal}
+        onSplitTerminalVertical={splitTerminalVertical}
         onNewTerminal={createNewTerminal}
         onActiveTerminalChange={activateTerminal}
         onCloseTerminal={closeTerminal}

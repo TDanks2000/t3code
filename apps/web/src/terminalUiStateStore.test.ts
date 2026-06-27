@@ -1,5 +1,5 @@
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { workspaceTerminalThreadRef } from "@t3tools/client-runtime";
+import { workspaceTerminalThreadRef } from "@t3tools/client-runtime/workspaceTerminal";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 

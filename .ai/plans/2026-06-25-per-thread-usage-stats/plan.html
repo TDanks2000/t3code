@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix Usage Tracking for All Providers + Per-Thread Usage Stats</title>
+  <meta name="strategist-type" content="plan">
+  <meta name="strategist-slug" content="per-thread-usage-stats">
+  <meta name="strategist-created" content="2026-06-25">
+  <meta name="strategist-status" content="ready">
+  <meta name="strategist-target" content="server persistence, provider adapters, WebSocket RPC, contracts, pricing, thread detail UI, settings usage page">
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #1a1a1a; }
+    h1, h2, h3 { margin-top: 2rem; }
+    code { background: #f4f4f4; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85em; }
+    pre code { background: none; padding: 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+    th { background: #f4f4f4; }
+    .critical { color: #dc2626; font-weight: bold; }
+    .high { color: #d97706; font-weight: bold; }
+    .ok { color: #16a34a; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Fix Usage Tracking for All Providers + Per-Thread Usage Stats</h1>
+
+    <section aria-labelledby="tldr">
+      <h2 id="tldr">TL;DR</h2>
+      <p>
+        Cost/usage tracking is <span class="critical">broken for every provider except Claude</span>.
+        Three independent gaps in the ingestion pipeline make Codex, Grok, Cursor, and OpenCode turns
+        record <code>$0.00</code> cost and <code>0</code> tokens. The per-thread usage stats and settings
+        page enhancements the user wants are customers of this pipeline — building them on a broken
+        pipeline would produce misleading zero-data displays. <strong>Fix the pipeline first</strong>,
+        then add the UI features.
+      </p>
+    </section>
+
+    <section aria-labelledby="audit">
+      <h2 id="audit">Audit: 5 Gaps in the Usage Pipeline</h2>
+
+      <h3>Gap 1 — Claude is the only adapter that populates <code>turn.completed.payload.usage</code></h3>
+      <table>
+        <tr><th>Adapter</th><th><code>turn.completed</code> has <code>payload.usage</code>?</th></tr>
+        <tr><td>ClaudeAdapter</td><td>✅ Lines 1972, 2048 — <code>result.usage</code> (snake_case)</td></tr>
+        <tr><td>CodexAdapter</td><td><span class="critical">❌</span> Line 808 — missing</td></tr>
+        <tr><td>GrokAdapter</td><td><span class="critical">❌</span> Line 868 — missing</td></tr>
+        <tr><td>CursorAdapter</td><td><span class="critical">❌</span> Line 1043 — missing</td></tr>
+        <tr><td>OpenCodeAdapter</td><td><span class="critical">❌</span> Lines 916, 945, 1259 — missing</td></tr>
+      </table>
+      <p>Without <code>payload.usage</code>, the ingestion falls back to <code>thread.token-usage.updated</code> snapshots.</p>
+
+      <h3>Gap 2 — The <code>thread.token-usage.updated</code> fallback reads wrong field names</h3>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1616-1621</code></p>
+      <p>The fallback only reads <code>last*</code>-prefixed fields (<code>lastInputTokens</code>, <code>lastOutputTokens</code>, etc.).</p>
+      <table>
+        <tr><th>Adapter</th><th>Emits <code>token-usage.updated</code>?</th><th>Sets which fields?</th><th>Fallback works?</th></tr>
+        <tr><td>ClaudeAdapter</td><td>✅ Line 1751</td><td><code>inputTokens</code>, <code>outputTokens</code> (no <code>last*</code>)</td><td><span class="critical">❌</span> but irrelevant (Claude has <code>usage</code> in turn.completed)</td></tr>
+        <tr><td>CodexAdapter</td><td>✅ Line 774</td><td><code>lastInputTokens</code>, <code>lastOutputTokens</code> (at Lines 182-184)</td><td>✅ Works</td></tr>
+        <tr><td>OpenCodeAdapter</td><td>✅ Line 1025</td><td><code>inputTokens</code>, <code>outputTokens</code> (no <code>last*</code> at Lines 1015-1016)</td><td><span class="critical">❌</span> All resolve to 0</td></tr>
+        <tr><td>GrokAdapter</td><td><span class="critical">❌</span> Never emits</td><td>N/A</td><td><span class="critical">❌</span> Cache empty → all 0</td></tr>
+        <tr><td>CursorAdapter</td><td><span class="critical">❌</span> Never emits</td><td>N/A</td><td><span class="critical">❌</span> Cache empty → all 0</td></tr>
+      </table>
+
+      <h3>Gap 3 — Model name extraction from <code>modelUsage</code> is structurally wrong</h3>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1625-1628</code></p>
+      <pre><code>const model =
+  typeof event.payload.modelUsage?.model === "string"
+    ? event.payload.modelUsage.model
+    : undefined;</code></pre>
+      <p><code>modelUsage</code> is typed as <code>Record&lt;string, ModelUsage&gt;</code> where <strong>keys are model names</strong> (e.g., <code>{ "claude-sonnet-4-6": { inputTokens: ..., outputTokens: ..., costUSD: ... } }</code>). There is no <code>.model</code> property. The correct extraction is <code>Object.keys(event.payload.modelUsage)[0]</code>.</p>
+      <p>Consequence: <code>model</code> is always <code>undefined</code>, so <code>computeCost(model, ...)</code> at line 1635 is never reached. Cost is <code>0</code> for any provider that doesn't report <code>totalCostUsd</code>.</p>
+
+      <h3>Gap 4 — No session-model fallback when <code>turn.completed</code> lacks model info</h3>
+      <p>Every adapter knows the active model at the session level. The session object (<code>ctx.session.model</code>) has the model string. But the ingestion code never falls back to the session model when the <code>turn.completed</code> event doesn't carry it.</p>
+
+      <h3>Gap 5 — No model alias normalization before pricing lookup</h3>
+      <p>The <code>normalizeModelSlug</code> function exists at <code>packages/shared/src/model.ts:235</code> and the alias table <code>MODEL_SLUG_ALIASES_BY_PROVIDER</code> exists at <code>packages/contracts/src/model.ts:157</code>. However the ingestion pipeline (which lives in <code>apps/server/src/orchestration/</code>, not in provider code) never calls <code>normalizeModelSlug</code>. A model string like <code>"sonnet"</code> or <code>"5.4"</code> would fail to match <code>PRICING_BY_MODEL</code>.</p>
+      <p>Additionally, the alias table has no entries for <code>GROK_DRIVER_KIND</code> or <code>OPENCODE_DRIVER_KIND</code> — these need entries added.</p>
+
+      <h3>Impact summary</h3>
+      <table>
+        <tr><th>Provider</th><th>Tokens logged?</th><th>Model logged?</th><th>Cost logged?</th><th>Why</th></tr>
+        <tr><td>Claude</td><td>✅</td><td><span class="critical">❌</span> (always null)</td><td>✅</td><td>Claude SDK provides <code>total_cost_usd</code> directly; tokens from <code>payload.usage</code></td></tr>
+        <tr><td>Codex</td><td>✅ (via fallback)</td><td><span class="critical">❌</span></td><td><span class="critical">❌</span> $0</td><td>Tokens work via fallback; cost fails (no <code>totalCostUsd</code>, no <code>model</code>)</td></tr>
+        <tr><td>OpenCode</td><td><span class="critical">❌</span> 0</td><td><span class="critical">❌</span></td><td><span class="critical">❌</span> $0</td><td>Fallback reads <code>lastInputTokens</code> but OpenCode emits <code>inputTokens</code></td></tr>
+        <tr><td>Grok</td><td><span class="critical">❌</span> 0</td><td><span class="critical">❌</span></td><td><span class="critical">❌</span> $0</td><td>Never emits <code>thread.token-usage.updated</code>; all fallback fields are 0</td></tr>
+        <tr><td>Cursor</td><td><span class="critical">❌</span> 0</td><td><span class="critical">❌</span></td><td><span class="critical">❌</span> $0</td><td>Same as Grok</td></tr>
+      </table>
+    </section>
+
+    <section aria-labelledby="recommendation">
+      <h2 id="recommendation">Recommendation</h2>
+      <p><strong>Fix the pipeline first, then build the UI on top.</strong></p>
+      <p>The original request (per-thread usage stats + settings page) is a customer of the cost pipeline. Building it before fixing the pipeline would produce a UI that shows <code>$0.00</code> for 4 out of 5 providers — worse than no feature at all (users would think the app is misreporting).</p>
+      <p>Split into two phases:</p>
+      <ul>
+        <li><strong>Phase 1 (P0):</strong> Fix the 5 ingestion gaps so all providers log correct cost/tokens/model.</li>
+        <li><strong>Phase 2 (P1):</strong> Add per-thread usage chip + settings page thread drill-down.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="scope">
+      <h2 id="scope">Scope</h2>
+      <h3>Phase 1 — Fix pipeline (in scope)</h3>
+      <ol>
+        <li>Fix field name mismatch in the <code>thread.token-usage.updated</code> fallback — check both <code>last*</code> and non-prefixed fields.</li>
+        <li>Fix model name extraction from <code>modelUsage</code> — use <code>Object.keys()</code> to get the model name from the record keys.</li>
+        <li>Add session model fallback — when <code>turn.completed</code> lacks model info, fall back to the thread's session model.</li>
+        <li>Apply <code>normalizeModelSlug</code> before pricing lookup — call it with the correct provider driver kind.</li>
+        <li>Populate <code>turn.completed.payload.usage</code> in GrokAdapter, CursorAdapter, CodexAdapter, and OpenCodeAdapter.</li>
+        <li>Add <code>thread.token-usage.updated</code> emission to GrokAdapter and CursorAdapter.</li>
+        <li>Add <code>GROK_DRIVER_KIND</code> and <code>OPENCODE_DRIVER_KIND</code> entries to <code>MODEL_SLUG_ALIASES_BY_PROVIDER</code>.</li>
+        <li>Fix OpenCodeAdapter to set both <code>inputTokens</code> and <code>lastInputTokens</code> (or fix the fallback to read both).</li>
+      </ol>
+      <h3>Phase 2 — UI features (in scope)</h3>
+      <ol>
+        <li>Add <code>aggregateByThreadId</code> + <code>aggregateByAllThreads</code> to TurnCostRepository.</li>
+        <li>Wire <code>threadId</code> filtering in <code>getUsageSummary</code> RPC handler.</li>
+        <li>Add <code>getUsageSummaryByThread</code> RPC.</li>
+        <li>Client: extract shared <code>useUsageAggregate</code> hook + display components.</li>
+        <li>Client: add <code>ThreadUsageChip</code> in ChatHeader (per-thread cost/tokens).</li>
+        <li>Client: enhance <code>UsageSettingsPanel</code> with thread-level breakdown.</li>
+      </ol>
+      <h3>Out of scope (for now)</h3>
+      <ul>
+        <li>Sidebar per-thread cost badges (needs schema + projection change).</li>
+        <li>Per-turn cost on fold rows.</li>
+        <li>Date-range filtering.</li>
+        <li>Export/download usage data.</li>
+        <li>Real-time usage during running turns.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="implementation-plan">
+      <h2 id="implementation-plan">Implementation Plan</h2>
+
+      <h3>Phase 1 — Fix pipeline for all providers</h3>
+
+      <p><strong>Fix 1: Fix the <code>thread.token-usage.updated</code> fallback to read both <code>last*</code> and non-prefixed fields</strong></p>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1616-1621</code></p>
+      <p>Change from:</p>
+      <pre><code>inputTokens = cachedUsage.lastInputTokens ?? 0;
+outputTokens = cachedUsage.lastOutputTokens ?? 0;
+cachedInputTokens = cachedUsage.lastCachedInputTokens ?? 0;
+reasoningTokens = cachedUsage.lastReasoningOutputTokens ?? 0;</code></pre>
+      <p>To:</p>
+      <pre><code>inputTokens = cachedUsage.lastInputTokens ?? cachedUsage.inputTokens ?? 0;
+outputTokens = cachedUsage.lastOutputTokens ?? cachedUsage.outputTokens ?? 0;
+cachedInputTokens = cachedUsage.lastCachedInputTokens ?? cachedUsage.cachedInputTokens ?? 0;
+reasoningTokens = cachedUsage.lastReasoningOutputTokens ?? cachedUsage.reasoningOutputTokens ?? 0;</code></pre>
+      <p>This fixes <strong>OpenCodeAdapter</strong> (which sets <code>inputTokens</code> not <code>lastInputTokens</code>).</p>
+
+      <p><strong>Fix 2: Fix model name extraction from <code>modelUsage</code></strong></p>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1625-1628</code></p>
+      <p>Change from:</p>
+      <pre><code>const model =
+  typeof event.payload.modelUsage?.model === "string"
+    ? event.payload.modelUsage.model
+    : undefined;</code></pre>
+      <p>To:</p>
+      <pre><code>const modelUsageRecord = event.payload.modelUsage;
+const rawModel =
+  modelUsageRecord && typeof modelUsageRecord === "object"
+    ? (Object.keys(modelUsageRecord).find((k) => typeof k === "string") ?? undefined)
+    : undefined;</code></pre>
+      <p><code>modelUsage</code> is <code>Record&lt;string, ModelUsage&gt;</code> where keys are model names like <code>"claude-sonnet-4-6"</code> (this is how the Claude SDK structures it).</p>
+
+      <p><strong>Fix 3: Add session model fallback</strong></p>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts</code></p>
+      <p>When <code>rawModel</code> is still undefined after Fix 2, try to get the model from the thread's session. The session model is available through the existing <code>ProviderService</code> or the thread's <code>session</code> data. Pass the provider instance ID through and look up the configured model.</p>
+      <p>The simplest approach: add a <code>Map&lt;ThreadId, string&gt;</code> that tracks the active model per thread from session start events. <code>session.started</code> events carry a <code>model</code> field. Cache it at the same scope as <code>latestTokenUsageByThread</code>.</p>
+
+      <p><strong>Fix 4: Apply <code>normalizeModelSlug</code> before pricing lookup</strong></p>
+      <p>File: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts</code> (around line 1634)</p>
+      <pre><code>import { normalizeModelSlug } from "@t3tools/shared/model";
+
+// ... after model extraction:
+const normalizedModel = model ? normalizeModelSlug(model, event.provider) : null;
+let costUsd: number | undefined;
+if (typeof event.payload.totalCostUsd === "number") {
+  costUsd = event.payload.totalCostUsd;
+} else if (normalizedModel) {
+  costUsd = computeCost(normalizedModel, inputTokens, outputTokens, cachedInputTokens) ?? 0;
+} else {
+  costUsd = 0;
+}</code></pre>
+      <p>Also store the normalized model in the DB row instead of the raw model (or store both — store the normalized form for cost attribution).</p>
+
+      <p><strong>Fix 5: Add alias entries for Grok and OpenCode</strong></p>
+      <p>File: <code>packages/contracts/src/model.ts</code>, inside <code>MODEL_SLUG_ALIASES_BY_PROVIDER</code>:</p>
+      <pre><code>[GROK_DRIVER_KIND]: {
+  "grok": "grok-3",
+  "grok-2": "grok-2",
+  "grok-3": "grok-3",
+  "grok-build": "grok-build",
+},
+[OPENCODE_DRIVER_KIND]: {
+  "openai/gpt-5": "openai/gpt-5",
+  "gpt-5": "openai/gpt-5",
+},</code></pre>
+      <p>Also verify the existing <code>PRICING_BY_MODEL</code> entries match the canonical names after normalization. Currently <code>"openai/gpt-5"</code> is in PRICING_BY_MODEL but after normalization, OpenCode's model <code>"openai/gpt-5"</code> (its default) would remain <code>"openai/gpt-5"</code> which matches. Good.</p>
+
+      <p><strong>Fix 6: Populate <code>turn.completed.payload.usage</code> in all adapters</strong></p>
+      <p>For each non-Claude adapter, extract token counts from the provider's turn completion data and populate <code>payload.usage = { input_tokens, output_tokens, cached_input_tokens }</code>.</p>
+      <ul>
+        <li><strong>CodexAdapter</strong> (<code>CodexAdapter.ts:808</code>): The <code>thread/tokenUsage/updated</code> event carries token counts in <code>last.inputTokens</code>, <code>last.outputTokens</code>. Read from the most recent cached usage at turn.completed time.</li>
+        <li><strong>GrokAdapter</strong> (<code>GrokAdapter.ts:868</code>): If the turn completion carries usage, map it.</li>
+        <li><strong>CursorAdapter</strong> (<code>CursorAdapter.ts:1043</code>): Similar — check if the completion data has token counts.</li>
+        <li><strong>OpenCodeAdapter</strong> (<code>OpenCodeAdapter.ts:916, 945, 1259</code>): The step completion data has <code>input</code> and <code>output</code> token counts. Map these to <code>{ input_tokens, output_tokens }</code>.</li>
+      </ul>
+      <p>This is the most adapter-specific fix. Each adapter may need different extraction logic. The important thing is to set <code>payload.usage</code> so the ingestion code finds tokens directly in <code>turn.completed</code> rather than relying on the fallback.</p>
+
+      <p><strong>Fix 7: Emit <code>thread.token-usage.updated</code> from GrokAdapter and CursorAdapter</strong></p>
+      <p>If the adapter doesn't have direct per-turn usage data at turn-completion time, at minimum emit periodic <code>thread.token-usage.updated</code> events so the fallback has data to work with.</p>
+      <p><strong>GrokAdapter</strong>: Add emission of <code>thread.token-usage.updated</code> when context window updates are available. Follow the pattern from CodexAdapter (<code>CodexAdapter.ts:768-774</code>) or OpenCodeAdapter (<code>OpenCodeAdapter.ts:1013-1025</code>).</p>
+      <p><strong>CursorAdapter</strong>: Same — emit <code>thread.token-usage.updated</code> events.</p>
+
+      <p><strong>Fix 8: Fix OpenCodeAdapter to set <code>last*</code> fields too, or ensure Fix 1 handles it</strong></p>
+      <p>Fix 1 already handles the case where <code>lastInputTokens</code> is undefined by falling back to <code>inputTokens</code>. But for consistency and to avoid relying on fallback ordering, also add <code>lastInputTokens</code> / <code>lastOutputTokens</code> to the OpenCodeAdapter's <code>thread.token-usage.updated</code> payload. File: <code>OpenCodeAdapter.ts:1015-1016</code>.</p>
+
+      <h3>Phase 2 — Per-thread usage stats &amp; UI</h3>
+
+      <p><strong>Step 1: Add <code>aggregateByThreadId</code> + <code>aggregateByAllThreads</code> to server</strong></p>
+      <p>Files:</p>
+      <ul>
+        <li><code>apps/server/src/persistence/Services/TurnCosts.ts</code> — add methods to interface</li>
+        <li><code>apps/server/src/persistence/Layers/TurnCosts.ts</code> — add SQL queries (WHERE thread_id = ? / GROUP BY thread_id)</li>
+      </ul>
+
+      <p><strong>Step 2: Wire <code>threadId</code> filter into <code>getUsageSummary</code> RPC handler</strong></p>
+      <p>File: <code>apps/server/src/ws.ts:1846-1897</code>. Chain the filter: threadId → projectId → aggregateAll.</p>
+
+      <p><strong>Step 3: Add <code>getUsageSummaryByThread</code> RPC</strong></p>
+      <p>File: <code>packages/contracts/src/rpc.ts</code>. New RPC returning per-thread aggregates array.</p>
+
+      <p><strong>Step 4: Extract shared client primitives</strong></p>
+      <p>Create <code>apps/web/src/hooks/useUsageAggregate.ts</code> and <code>apps/web/src/components/settings/UsageDisplayComponents.tsx</code>. Refactor <code>DashboardPanel.tsx</code> and <code>UsageSettingsPanel.tsx</code> to use them.</p>
+
+      <p><strong>Step 5: Add <code>ThreadUsageChip</code> in ChatHeader</strong></p>
+      <p>New component showing <code>$0.12 · 4.2K tokens</code> for the current thread.</p>
+
+      <p><strong>Step 6: Enhance UsageSettingsPanel with thread drill-down</strong></p>
+      <p>Add "Usage by Thread" section below the global summary.</p>
+    </section>
+
+    <section aria-labelledby="code-quality">
+      <h2 id="code-quality">Code Quality Rules</h2>
+      <ul>
+        <li>No <code>any</code>.</li>
+        <li>Follow existing Effect patterns (<code>Effect.gen</code>, pipe, <code>SqlSchema</code>).</li>
+        <li>Reuse <code>@t3tools/contracts</code> types.</li>
+        <li>Follow SQL naming conventions (<code>snake_case</code> columns → <code>camelCase</code> AS aliases).</li>
+        <li>No new npm dependencies.</li>
+        <li>Preserve existing component interfaces.</li>
+        <li>Don't change the ClaudeAdapter's behavior — it works and ships <code>total_cost_usd</code> from the SDK.</li>
+        <li>Don't change the <code>TurnCostRow</code> DB schema — add columns only if strictly needed (normalized model should fit the existing <code>model</code> column).</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="validation">
+      <h2 id="validation">Testing &amp; Validation</h2>
+      <ul>
+        <li><code>vp check</code> must pass after all phases.</li>
+        <li><code>vp run typecheck</code> must pass.</li>
+        <li>After Phase 1: verify <code>CostAggregate</code> across all providers shows non-zero tokens and cost.</li>
+        <li>After Phase 2: verify the settings usage page shows thread-level breakdown with accurate data.</li>
+        <li>Manually verify with a real Claude session that the existing behavior is preserved.</li>
+        <li>Manually verify with OpenCode that tokens and cost are now recorded.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="acceptance-criteria">
+      <h2 id="acceptance-criteria">Acceptance Criteria</h2>
+      <ol>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.1:</strong> OpenCode turns record non-zero tokens (fallback reads both <code>last*</code> and non-prefixed fields).</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.2:</strong> Claude model name is correctly extracted from <code>modelUsage</code> record keys.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.3:</strong> Codex/OpenCode/Grok/Cursor model names resolve through session-model fallback.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.4:</strong> <code>normalizeModelSlug</code> is applied before pricing lookup; aliases like <code>"sonnet"</code> → <code>"claude-sonnet-4-6"</code> work.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.5:</strong> Grok and OpenCode models have alias entries; non-Claude adapters populate <code>payload.usage</code>.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 1.6:</strong> GrokAdapter and CursorAdapter emit <code>thread.token-usage.updated</code> events.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 2.1:</strong> Server has <code>aggregateByThreadId</code> query, RPC handler respects <code>threadId</code>.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 2.2:</strong> Server has <code>getUsageSummaryByThread</code> RPC returning per-thread aggregates.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 2.3:</strong> <code>ThreadUsageChip</code> appears in ChatHeader with non-zero data for providers.</li>
+        <li><span class="ok">[ ]</span> <strong>Phase 2.4:</strong> Usage settings page shows thread-level breakdown with accurate costs.</li>
+        <li><span class="ok">[ ]</span> <strong>All:</strong> <code>vp check</code> and <code>vp run typecheck</code> pass.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="risks">
+      <h2 id="risks">Risks &amp; Notes</h2>
+      <ul>
+        <li><strong>Phase 1 is the prerequisite.</strong> Don't start Phase 2 until Phase 1 is verified with real data.</li>
+        <li><strong>Claude must not regress.</strong> Claude is currently the only provider with correct cost tracking (because the SDK reports <code>total_cost_usd</code>). Fixes to model extraction must not break this.</li>
+        <li><strong>Session model fallback is approximate.</strong> If a user changes the model mid-thread, the session model at turn-completed time may differ from the model used for the turn. This is a minor edge case. For precise attribution, each adapter should report the per-turn model in <code>turn.completed</code>.</li>
+        <li><strong>OpenCode's <code>cost</code> field:</strong> OpenCode's step completion data includes a <code>cost</code> field (<code>OpenCodeAdapter.ts:1009</code>). This could be mapped to <code>payload.totalCostUsd</code> for direct cost tracking without pricing table lookups. Investigate this as an additional improvement.</li>
+        <li><strong><code>readLocalApi().server.*</code> only works in Electron.</strong> The web mode uses WebSocket RPC via <code>connection.client.server.*</code>. The shared hook needs to handle both paths.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

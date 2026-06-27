@@ -9,7 +9,7 @@ import { IdeEditorPanel } from "./IdeEditorPanel";
 import { IdeAgentPanel } from "./IdeAgentPanel";
 import { IdeBottomPanel, type IdeBottomTab } from "./IdeBottomPanel";
 import { IdeEmptyState } from "./IdeEmptyState";
-import { usePrimaryEnvironmentId } from "../../environments/primary/context";
+import { usePrimaryEnvironmentId } from "../../state/environments";
 import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,

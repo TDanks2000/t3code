@@ -24,6 +24,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { FileDiff } from "@pierre/diffs/react";
 import {
   deriveTimelineEntries,
+  type WorkEntryImagePreview,
   workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
@@ -460,18 +461,23 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="group flex flex-col items-end gap-1">
-      <div className="relative max-w-[80%] rounded-2xl border border-border bg-secondary p-3">
+      <div className="relative max-w-[82%] rounded-2xl rounded-br-md bg-secondary px-3.5 py-2.5 shadow-sm ring-1 ring-border/70">
         {regularImages.length > 0 && (
-          <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
+          <div
+            className={cn(
+              "mb-2.5 grid max-w-[420px] gap-2",
+              regularImages.length === 1 ? "grid-cols-1" : "grid-cols-2",
+            )}
+          >
             {regularImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
               <div
                 key={image.id}
-                className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
+                className="group/img relative overflow-hidden rounded-xl bg-background/70 ring-1 ring-border/70"
               >
                 {image.previewUrl ? (
                   <button
                     type="button"
-                    className="h-full w-full cursor-zoom-in"
+                    className="block h-full w-full cursor-zoom-in"
                     aria-label={`Preview ${image.name}`}
                     onClick={() => {
                       const preview = buildExpandedImagePreview(regularImages, image.id);
@@ -482,8 +488,9 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                     <img
                       src={image.previewUrl}
                       alt={image.name}
-                      className="block h-auto max-h-[220px] w-full object-cover"
+                      className="block h-auto max-h-[260px] w-full object-cover transition-transform duration-300 group-hover/img:scale-[1.03]"
                     />
+                    <span className="pointer-events-none absolute inset-0 bg-foreground/0 transition-colors duration-200 group-hover/img:bg-foreground/[0.04]" />
                   </button>
                 ) : (
                   <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-[11px] text-muted-foreground/70">
@@ -593,7 +600,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
 
   return (
     <>
-      <div className="relative min-w-0 rounded-xl border-l-2 border-primary/15 bg-card/15 px-3 py-1.5">
+      <div className="relative min-w-0 px-0.5 py-0.5">
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -1579,6 +1586,16 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }
 
+/** Resolves the fetchable URL for a work-entry image preview by source kind. */
+function workEntryImagePreviewSrc(
+  preview: WorkEntryImagePreview,
+  httpBaseUrl: string,
+): string {
+  return preview.kind === "server_path"
+    ? `${httpBaseUrl}${preview.src}`
+    : `${httpBaseUrl}${workspaceFilePreviewRoutePath(preview.path)}`;
+}
+
 const stopRowToggle = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
@@ -1781,21 +1798,24 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       workEntry.imagePreviews.length > 0 &&
       ctx.environmentHttpBaseUrl ? (
         <div
-          className="ml-7 mt-1.5 grid grid-cols-2 gap-1.5"
+          className={cn(
+            "ml-7 mt-2 grid gap-1.5",
+            workEntry.imagePreviews.length === 1 ? "max-w-md grid-cols-1" : "grid-cols-2",
+          )}
           onClick={stopRowToggle}
           onPointerDown={stopRowToggle}
         >
           {workEntry.imagePreviews.map((preview, index) => {
-            const previewUrl = `${ctx.environmentHttpBaseUrl}${workspaceFilePreviewRoutePath(preview.path)}`;
+            const previewUrl = workEntryImagePreviewSrc(preview, ctx.environmentHttpBaseUrl!);
             return (
               <button
                 key={preview.id}
                 type="button"
-                className="overflow-hidden rounded-md border border-border/40 bg-muted/20 cursor-zoom-in"
+                className="group/shot relative cursor-zoom-in overflow-hidden rounded-lg bg-muted/30 ring-1 ring-border/50 transition-shadow hover:ring-border"
                 aria-label={`Preview ${preview.name}`}
                 onClick={() => {
                   const gallery = workEntry.imagePreviews!.map((p) => ({
-                    src: `${ctx.environmentHttpBaseUrl}${workspaceFilePreviewRoutePath(p.path)}`,
+                    src: workEntryImagePreviewSrc(p, ctx.environmentHttpBaseUrl!),
                     name: p.name,
                   }));
                   ctx.onImageExpand({ images: gallery, index });
@@ -1804,9 +1824,13 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                 <img
                   src={previewUrl}
                   alt={preview.name}
-                  className="block h-auto max-h-[100px] w-full object-cover"
+                  className="block h-auto max-h-[200px] w-full bg-muted/40 object-contain"
                   loading="lazy"
                 />
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-1 bg-linear-to-t from-background/85 to-transparent px-2 pb-1 pt-4 text-[10px] font-medium text-foreground/70 opacity-0 transition-opacity duration-200 group-hover/shot:opacity-100">
+                  <EyeIcon className="size-3 shrink-0" />
+                  <span className="truncate">{preview.name}</span>
+                </span>
               </button>
             );
           })}

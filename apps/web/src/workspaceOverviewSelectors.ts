@@ -16,8 +16,41 @@ export interface AttentionItem {
   reason: "pending-approval" | "pending-user-input" | "actionable-plan" | "error";
 }
 
+interface WorkspaceOverviewSelectorCache {
+  readonly environments: AppState["environments"];
+  readonly threads: SidebarThreadSummary[];
+  readonly recentThreads: SidebarThreadSummary[];
+}
+
+let selectorCache: WorkspaceOverviewSelectorCache | null = null;
+
+function selectCachedWorkspaceOverviewThreads(state: AppState): SidebarThreadSummary[] {
+  if (selectorCache?.environments !== state.environments) {
+    const threads = selectSidebarThreadsAcrossEnvironments(state);
+    selectorCache = {
+      environments: state.environments,
+      threads,
+      recentThreads: [...threads].sort(compareRecentThreads),
+    };
+  }
+  return selectorCache.threads;
+}
+
+function selectCachedRecentWorkspaceOverviewThreads(state: AppState): SidebarThreadSummary[] {
+  if (selectorCache?.environments !== state.environments) {
+    selectCachedWorkspaceOverviewThreads(state);
+  }
+  return selectorCache?.recentThreads ?? [];
+}
+
+function compareRecentThreads(a: SidebarThreadSummary, b: SidebarThreadSummary): number {
+  const aTime = a.updatedAt ?? a.createdAt;
+  const bTime = b.updatedAt ?? b.createdAt;
+  return bTime.localeCompare(aTime);
+}
+
 export function selectOverviewStats(state: AppState): OverviewStats {
-  const threads = selectSidebarThreadsAcrossEnvironments(state);
+  const threads = selectCachedWorkspaceOverviewThreads(state);
   const today = new Date().toISOString().slice(0, 10);
 
   let activeRuns = 0;
@@ -30,8 +63,8 @@ export function selectOverviewStats(state: AppState): OverviewStats {
     const turn = thread.latestTurn;
 
     if (
-      session?.orchestrationStatus === "running" ||
-      session?.orchestrationStatus === "starting" ||
+      session?.status === "running" ||
+      session?.status === "starting" ||
       turn?.state === "running"
     ) {
       activeRuns++;
@@ -45,8 +78,9 @@ export function selectOverviewStats(state: AppState): OverviewStats {
       waitingApproval++;
     }
 
-    if (session?.provider) {
-      providerCount.set(session.provider, (providerCount.get(session.provider) ?? 0) + 1);
+    if (session?.providerName) {
+      const p = session.providerName as ProviderDriverKind;
+      providerCount.set(p, (providerCount.get(p) ?? 0) + 1);
     }
   }
 
@@ -69,7 +103,7 @@ export function selectOverviewStats(state: AppState): OverviewStats {
 }
 
 export function selectAttentionItems(state: AppState): AttentionItem[] {
-  const threads = selectSidebarThreadsAcrossEnvironments(state);
+  const threads = selectCachedWorkspaceOverviewThreads(state);
   const items: AttentionItem[] = [];
 
   for (const thread of threads) {
@@ -86,7 +120,7 @@ export function selectAttentionItems(state: AppState): AttentionItem[] {
     ) {
       items.push({ thread, reason: "actionable-plan" });
     }
-    if (thread.session?.orchestrationStatus === "error" || thread.session?.status === "error") {
+    if (thread.session?.status === "error") {
       items.push({ thread, reason: "error" });
     }
   }
@@ -95,13 +129,13 @@ export function selectAttentionItems(state: AppState): AttentionItem[] {
 }
 
 export function selectActiveWorkThreads(state: AppState): SidebarThreadSummary[] {
-  const threads = selectSidebarThreadsAcrossEnvironments(state);
+  const threads = selectCachedWorkspaceOverviewThreads(state);
   return threads.filter((thread) => {
     const session = thread.session;
     const turn = thread.latestTurn;
     return (
-      session?.orchestrationStatus === "running" ||
-      session?.orchestrationStatus === "starting" ||
+      session?.status === "running" ||
+      session?.status === "starting" ||
       turn?.state === "running" ||
       turn?.state === "interrupted"
     );
@@ -109,25 +143,15 @@ export function selectActiveWorkThreads(state: AppState): SidebarThreadSummary[]
 }
 
 export function selectRecentThreads(state: AppState, limit = 10): SidebarThreadSummary[] {
-  const threads = selectSidebarThreadsAcrossEnvironments(state);
-  return [...threads]
-    .sort((a, b) => {
-      const aTime = a.updatedAt ?? a.createdAt;
-      const bTime = b.updatedAt ?? b.createdAt;
-      return bTime.localeCompare(aTime);
-    })
-    .slice(0, limit);
+  return selectCachedRecentWorkspaceOverviewThreads(state).slice(0, limit);
 }
 
 export function selectHasThreads(state: AppState): boolean {
-  return selectSidebarThreadsAcrossEnvironments(state).length > 0;
+  return selectCachedWorkspaceOverviewThreads(state).length > 0;
 }
 
 export function selectBootstrapCompleteAcrossEnvironments(state: AppState): boolean {
-  for (const envState of Object.values(state.environmentStateById) as EnvironmentState[]) {
-    if (!envState.bootstrapComplete) {
-      return false;
-    }
-  }
-  return Object.keys(state.environmentStateById).length > 0;
+  const envValues = Object.values(state.environments);
+  if (envValues.length === 0) return false;
+  return envValues.every((env) => env.bootstrapComplete);
 }

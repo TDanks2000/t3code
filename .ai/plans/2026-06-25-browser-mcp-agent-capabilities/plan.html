@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browser MCP Agent Capabilities</title>
+  <meta name="strategist-type" content="plan">
+  <meta name="strategist-slug" content="browser-mcp-agent-capabilities">
+  <meta name="strategist-created" content="2026-06-25">
+  <meta name="strategist-status" content="ready">
+  <meta name="strategist-target" content="packages/contracts/src/previewAutomation.ts, apps/server/src/mcp/toolkits/preview/, apps/web/src/components/preview/PreviewAutomationOwner.tsx, apps/desktop/src/preview/Manager.ts, apps/desktop/src/ipc/methods/preview.ts">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a1a; background: #fafafa; padding: 2rem 1rem; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.25rem; }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.25rem; color: #333; }
+    p, li { margin-bottom: 0.5rem; }
+    ul, ol { padding-left: 1.4rem; }
+    code { font-family: ui-monospace, monospace; font-size: 0.875rem; background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { background: #f0f0f0; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+    pre code { background: none; padding: 0; }
+    .badge { display: inline-block; padding: 0.15em 0.5em; border-radius: 3px; font-size: 0.8rem; font-weight: 600; margin-right: 0.4rem; }
+    .new { background: #dcfce7; color: #166534; }
+    .extend { background: #dbeafe; color: #1e40af; }
+    .medium { background: #fef3c7; color: #92400e; }
+    .task { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.2rem; margin: 1rem 0; background: #fff; }
+    .task h3 { margin-top: 0; }
+    .tldr { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 0.75rem 1rem; border-radius: 0 4px 4px 0; margin: 1rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.9rem; }
+    th { background: #f4f4f4; font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Browser MCP Agent Capabilities</h1>
+  <p style="color:#666;font-size:0.9rem;">T3 Code · 2026-06-25 · Preview automation MCP toolkit</p>
+
+  <section aria-labelledby="tldr">
+    <h2 id="tldr">TL;DR</h2>
+    <div class="tldr">
+      <p>
+        The existing MCP browser toolkit covers 12 operations but is missing four agent-blocking gaps:
+        hover (no way to reveal tooltips or CSS :hover menus without evaluate), native
+        <code>&lt;select&gt;</code> option picking, double-click / right-click (needed for context
+        menus and rich editors), and multi-tab management (the agent cannot list, switch, or close
+        tabs). This plan adds 6 new MCP tools and extends 1 existing one across 6 files — all
+        additive, no breaking changes.
+      </p>
+    </div>
+  </section>
+
+  <section aria-labelledby="codebase-understanding">
+    <h2 id="codebase-understanding">Codebase Understanding</h2>
+
+    <h3>Stack</h3>
+    <ul>
+      <li><strong>MCP layer</strong>: Effect-TS 4.0 beta <code>Tool</code> / <code>Toolkit</code> from <code>effect/unstable/ai</code>, served over HTTP/SSE in <code>apps/server/src/mcp/McpHttpServer.ts</code></li>
+      <li><strong>Broker</strong>: <code>apps/server/src/mcp/PreviewAutomationBroker.ts</code> — a <code>SynchronizedRef</code>-backed queue that routes MCP requests to the connected Electron renderer owner</li>
+      <li><strong>Renderer (owner)</strong>: <code>apps/web/src/components/preview/PreviewAutomationOwner.tsx</code> — a React hook that picks up requests from the broker queue and dispatches them via a <code>switch(request.operation)</code> to either in-process state or <code>window.desktopBridge.preview.automation.*</code> IPC calls</li>
+      <li><strong>Desktop IPC handlers</strong>: <code>apps/desktop/src/ipc/methods/preview.ts</code> — thin wrappers over <code>PreviewManager</code></li>
+      <li><strong>PreviewManager</strong>: <code>apps/desktop/src/preview/Manager.ts</code> (2,811 lines) — the main-process Chromium controller using CDP / <code>Input.dispatchMouseEvent</code> / Playwright injected runtime</li>
+      <li><strong>Contracts</strong>: <code>packages/contracts/src/previewAutomation.ts</code> — all shared schemas and error classes</li>
+    </ul>
+
+    <h3>Dispatch chain for every operation</h3>
+    <ol>
+      <li>MCP handler calls <code>broker.invoke({ scope, operation, input })</code></li>
+      <li>Broker enqueues the <code>PreviewAutomationRequest</code> to the matching owner's queue</li>
+      <li><code>PreviewAutomationOwner.tsx handleRequest()</code> receives it, matches <code>request.operation</code> in a <code>switch</code></li>
+      <li>For desktop-native operations: calls <code>previewBridge.automation.*</code> which IPC-invokes <code>apps/desktop/src/ipc/methods/preview.ts</code></li>
+      <li>Desktop IPC handler calls <code>PreviewManager.automation*(tabId, input)</code></li>
+      <li>Manager uses CDP (<code>Input.dispatchMouseEvent</code>, <code>Runtime.callFunctionOn</code>, etc.) to drive Chromium</li>
+    </ol>
+
+    <h3>Current operation set</h3>
+    <table>
+      <tr><th>Operation</th><th>Tool</th><th>What it does</th></tr>
+      <tr><td>status</td><td>preview_status</td><td>Reports availability / active tab / URL / loading</td></tr>
+      <tr><td>open</td><td>preview_open</td><td>Creates a tab and reveals the browser panel</td></tr>
+      <tr><td>navigate</td><td>preview_navigate</td><td>Navigates the active tab to a URL or dev-server port</td></tr>
+      <tr><td>snapshot</td><td>preview_snapshot</td><td>Full page snapshot: screenshot, a11y tree, text, elements, logs</td></tr>
+      <tr><td>click</td><td>preview_click</td><td>Left-click via locator / selector / coordinates</td></tr>
+      <tr><td>type</td><td>preview_type</td><td>Insert text into a focused input</td></tr>
+      <tr><td>press</td><td>preview_press</td><td>Press a keyboard key with optional modifiers</td></tr>
+      <tr><td>scroll</td><td>preview_scroll</td><td>Scroll viewport or a container element</td></tr>
+      <tr><td>evaluate</td><td>preview_evaluate</td><td>Run arbitrary JS in the page frame</td></tr>
+      <tr><td>waitFor</td><td>preview_wait_for</td><td>Wait for locator / text / URL condition</td></tr>
+      <tr><td>recordingStart</td><td>preview_recording_start</td><td>Start screencast recording</td></tr>
+      <tr><td>recordingStop</td><td>preview_recording_stop</td><td>Stop recording and save artifact</td></tr>
+    </table>
+
+    <h3>Identified gaps</h3>
+    <ul>
+      <li><strong>Hover</strong>: No <code>Input.dispatchMouseEvent({ type: "mouseMoved" })</code> path. Agents must use <code>preview_evaluate</code> to manually dispatch <code>mouseenter</code> / <code>mouseover</code> events, which doesn't trigger CSS <code>:hover</code> pseudo-classes reliably.</li>
+      <li><strong>Select elements</strong>: <code>preview_type</code> calls <code>Input.insertText</code> which does nothing on <code>&lt;select&gt;</code> elements. No other tool can pick an option.</li>
+      <li><strong>Double-click / right-click</strong>: <code>performAutomationClick</code> hard-codes <code>button: "left"</code> and <code>clickCount: 1</code> in its CDP calls. Context menus and double-click-activated editors are unreachable.</li>
+      <li><strong>Multi-tab</strong>: The broker always resolves to <code>owner.tabId</code> (last focused tab). Agents cannot enumerate tabs, switch, or close one without user intervention.</li>
+    </ul>
+
+    <h3>Key constants and limits in Manager.ts</h3>
+    <ul>
+      <li><code>AGENT_CURSOR_MOVE_MS = 160</code> — delay between cursor move and click for animation</li>
+      <li><code>AGENT_CURSOR_CLICK_LEAD_MS = 40</code> — pre-click delay</li>
+      <li><code>MAX_INTERACTIVE_ELEMENTS = 200</code></li>
+      <li><code>MAX_VISIBLE_TEXT_LENGTH = 20_000</code></li>
+      <li><code>MAX_SCREENSHOT_WIDTH = 1280</code></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="recommendation">
+    <h2 id="recommendation">Recommendation</h2>
+    <p><strong>Do this now.</strong> All six changes are additive — new operations in the literal union,
+    new tools in the toolkit, new cases in the switch. Nothing is removed or renamed. The risk of
+    breaking existing behaviour is low. The value is high: hover and select unblock entire categories
+    of form and navigation interactions that currently require fragile <code>preview_evaluate</code>
+    workarounds, and multi-tab support unlocks authentication flows that require opening a login
+    page in a second tab.</p>
+  </section>
+
+  <section aria-labelledby="scope">
+    <h2 id="scope">Scope</h2>
+
+    <h3>In Scope</h3>
+    <ol>
+      <li><strong>preview_hover</strong> — new tool: move mouse to element, trigger CSS :hover state, hold for tooltip dwell time</li>
+      <li><strong>preview_select</strong> — new tool: pick a <code>&lt;select&gt;</code> option by value, visible label, or zero-based index</li>
+      <li><strong>preview_click extension</strong> — add optional <code>button</code> ("left" / "right" / "middle", default "left") and <code>clickCount</code> (1 / 2, default 1) to the existing click schema; no new tool needed</li>
+      <li><strong>preview_tab_list</strong> — new tool: return all open tabs for the current thread with their URL, title, loading state, and which one is active</li>
+      <li><strong>preview_tab_switch</strong> — new tool: make a specific tabId the active tab</li>
+      <li><strong>preview_tab_close</strong> — new tool: close a specific tab</li>
+    </ol>
+
+    <h3>Out of Scope</h3>
+    <ul>
+      <li>File upload / drag-and-drop (not confirmed as a pain point)</li>
+      <li>Iframe / shadow DOM targeting (complex, low frequency)</li>
+      <li>Network interception / mocking</li>
+      <li>Snapshot quality improvements (accessibility tree pruning, Playwright-style selector generation) — separate follow-up</li>
+      <li>Human-facing browser panel UI changes (tab bar, navigation chrome)</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="files">
+    <h2 id="files">Files and Areas to Inspect</h2>
+    <table>
+      <tr><th>File</th><th>What to understand before editing</th></tr>
+      <tr><td><code>packages/contracts/src/previewAutomation.ts</code></td><td>The <code>PreviewAutomationOperation</code> literals union; all existing input/output schemas; error class patterns (copy these exactly)</td></tr>
+      <tr><td><code>apps/server/src/mcp/toolkits/preview/tools.ts</code></td><td><code>browserTool</code> / <code>safeBrowserTool</code> / <code>readonlyBrowserTool</code> helpers; how <code>Toolkit.make</code> is composed; existing tool annotations</td></tr>
+      <tr><td><code>apps/server/src/mcp/toolkits/preview/handlers.ts</code></td><td>The <code>handlers</code> object shape; how <code>invoke&lt;A&gt;(operation, input, timeoutMs?)</code> is called</td></tr>
+      <tr><td><code>apps/web/src/components/preview/PreviewAutomationOwner.tsx</code></td><td>The <code>handleRequest</code> switch; <code>unavailableTarget</code> guard pattern; how <code>previewBridge.automation.*</code> IPC calls are made; <code>readThreadPreviewState()</code> for tab list data; <code>useRightPanelStore.getState().openBrowser()</code> for tab switch</td></tr>
+      <tr><td><code>apps/desktop/src/ipc/methods/preview.ts</code></td><td>The <code>DesktopIpc.makeIpcMethod</code> pattern; payload schema naming conventions (e.g. <code>DesktopPreviewAutomationClickInputSchema</code>); how the <code>PreviewManager</code> is obtained and called</td></tr>
+      <tr><td><code>apps/desktop/src/preview/Manager.ts</code></td><td><code>performAutomationClick</code> (lines ~1950–2010) for mouse event dispatch pattern; <code>resolveClickPoint</code> for locator resolution; <code>ensurePlaywrightInjected</code> + <code>evaluateWithDebugger</code> for JS evaluation; <code>withControlSession</code> for wrapping operations; <code>tabsRef</code> for tab state; the <code>PreviewManager</code> service interface declaration (lines ~2650–2760) where new methods must be added</td></tr>
+      <tr><td><code>apps/web/src/previewStateStore.ts</code></td><td>How sessions / snapshots / activeTabId are stored per thread — needed for <code>tabList</code> renderer-side data</td></tr>
+    </table>
+  </section>
+
+  <section aria-labelledby="implementation-plan">
+    <h2 id="implementation-plan">Implementation Plan</h2>
+
+    <!-- STEP 1 -->
+    <div class="task">
+      <h3><span class="badge extend">Step 1</span> Extend contracts — add new operations and schemas</h3>
+      <p><strong>File</strong>: <code>packages/contracts/src/previewAutomation.ts</code></p>
+      <ol>
+        <li>
+          Add the five new operation literals to <code>PreviewAutomationOperation</code>:
+          <pre><code>export const PreviewAutomationOperation = Schema.Literals([
+  "status", "open", "navigate", "snapshot",
+  "click", "type", "press", "scroll", "evaluate", "waitFor",
+  "recordingStart", "recordingStop",
+  // NEW:
+  "hover", "select", "tabList", "tabSwitch", "tabClose",
+]);</code></pre>
+        </li>
+        <li>
+          Extend <code>PreviewAutomationClickInput</code> with two optional fields (append before the refinement check):
+          <pre><code>button: Schema.optional(
+  Schema.Literals(["left", "right", "middle"]).annotate({
+    description: "Mouse button to press. Defaults to 'left'.",
+  }),
+),
+clickCount: Schema.optional(
+  Schema.Literals([1, 2]).annotate({
+    description: "Number of successive clicks. Use 2 for double-click. Defaults to 1.",
+  }),
+),</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewAutomationHoverInput</code> — same target fields as click (locator / selector / x+y), plus an optional <code>dwellMs</code> (how long to hold the hover, 0–2000ms, default 300):
+          <pre><code>export const PreviewAutomationHoverInput = Schema.Struct({
+  selector: Schema.optional(LegacySelector)...,
+  locator: Schema.optional(Locator)...,
+  x: Schema.optional(Schema.Finite...),
+  y: Schema.optional(Schema.Finite...),
+  dwellMs: Schema.optional(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+              .check(Schema.isLessThanOrEqualTo(2_000))
+              .annotate({ description: "Milliseconds to hold the hover position. Defaults to 300." }),
+  ),
+})
+.check(/* same target-exclusivity check as click, minus clickCount/button */)
+.annotate({ description: "Move the cursor to a target and hold to trigger CSS :hover state and tooltips." });</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewAutomationSelectInput</code> — locator / selector targeting plus exactly one of <code>value</code>, <code>label</code>, or <code>index</code>:
+          <pre><code>export const PreviewAutomationSelectInput = Schema.Struct({
+  selector: Schema.optional(LegacySelector)...,
+  locator: Schema.optional(Locator)...,
+  value: Schema.optional(Schema.String.annotate({ description: "Option value attribute to select." })),
+  label: Schema.optional(Schema.String.annotate({ description: "Visible option text to select (case-sensitive substring match)." })),
+  index: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({ description: "Zero-based option index." })),
+  timeoutMs: OptionalTimeoutMs,
+})
+.check(Schema.makeFilter((input) => {
+  const selectorModes = Number(!!input.selector) + Number(!!input.locator);
+  if (selectorModes > 1) return "Provide at most one of selector or locator.";
+  const valueModes = Number(input.value !== undefined) + Number(input.label !== undefined) + Number(input.index !== undefined);
+  return valueModes === 1 || "Provide exactly one of value, label, or index.";
+}))
+.annotate({ description: "Select an option from a native &lt;select&gt; element." });</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewAutomationTabList</code> output schema:
+          <pre><code>export const PreviewAutomationTabEntry = Schema.Struct({
+  tabId: PreviewTabId,
+  url: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+  loading: Schema.Boolean,
+  active: Schema.Boolean,
+});
+export const PreviewAutomationTabList = Schema.Struct({
+  tabs: Schema.Array(PreviewAutomationTabEntry),
+  activeTabId: Schema.NullOr(PreviewTabId),
+});</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewAutomationTabSwitchInput</code>:
+          <pre><code>export const PreviewAutomationTabSwitchInput = Schema.Struct({
+  tabId: PreviewTabId.annotate({ description: "Tab to make active." }),
+}).annotate({ description: "Switch the active browser tab." });</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewAutomationTabCloseInput</code>:
+          <pre><code>export const PreviewAutomationTabCloseInput = Schema.Struct({
+  tabId: PreviewTabId.annotate({ description: "Tab to close." }),
+}).annotate({ description: "Close a browser tab." });</code></pre>
+        </li>
+        <li>Export all new types from the contracts package's index if they aren't already re-exported via a barrel file.</li>
+      </ol>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="task">
+      <h3><span class="badge new">Step 2</span> Add new MCP tools and update toolkits</h3>
+      <p><strong>File</strong>: <code>apps/server/src/mcp/toolkits/preview/tools.ts</code></p>
+      <ol>
+        <li>
+          Import the new schema types from <code>@t3tools/contracts</code>.
+        </li>
+        <li>
+          Add <code>PreviewHoverTool</code> (safe, non-readonly — it moves the cursor and holds):
+          <pre><code>export const PreviewHoverTool = safeBrowserTool(
+  Tool.make("preview_hover", {
+    description:
+      "Move the cursor to a target and hold to trigger CSS :hover state, reveal tooltips, or expose hover-triggered menus. Provide exactly one of locator, selector, or the x/y coordinate pair. Call preview_snapshot first when the target is unknown.",
+    parameters: PreviewAutomationHoverInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Hover over preview element"),
+);</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewSelectTool</code> (browser tool — modifies page state):
+          <pre><code>export const PreviewSelectTool = browserTool(
+  Tool.make("preview_select", {
+    description:
+      "Choose an option from a native &lt;select&gt; element by value, visible label text, or zero-based index. Provide a locator or selector to target the &lt;select&gt; element, and exactly one of value, label, or index.",
+    parameters: PreviewAutomationSelectInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Select option in preview page"),
+);</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewTabListTool</code> (readonly):
+          <pre><code>export const PreviewTabListTool = readonlyBrowserTool(
+  Tool.make("preview_tab_list", {
+    description:
+      "List all open browser tabs for the current thread. Returns each tab's id, URL, title, loading state, and whether it is the currently active tab.",
+    success: PreviewAutomationTabList,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "List browser tabs"),
+);</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewTabSwitchTool</code> (safe — changes visible tab but doesn't mutate page content):
+          <pre><code>export const PreviewTabSwitchTool = safeBrowserTool(
+  Tool.make("preview_tab_switch", {
+    description:
+      "Make a different browser tab the active tab. The specified tab becomes the target for subsequent preview actions. Use preview_tab_list to find available tab ids.",
+    parameters: PreviewAutomationTabSwitchInput,
+    success: PreviewAutomationStatus,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Switch active browser tab"),
+);</code></pre>
+        </li>
+        <li>
+          Add <code>PreviewTabCloseTool</code> (destructive):
+          <pre><code>export const PreviewTabCloseTool = browserTool(
+  Tool.make("preview_tab_close", {
+    description:
+      "Close a browser tab. Use preview_tab_list to find tab ids. Closing the active tab will leave no active tab; use preview_tab_switch or preview_open to restore one.",
+    parameters: PreviewAutomationTabCloseInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Close browser tab"),
+);</code></pre>
+        </li>
+        <li>
+          Update <code>PreviewToolkit</code> and <code>PreviewStandardToolkit</code> to include all new tools. Add them after <code>PreviewScrollTool</code> (before <code>PreviewEvaluateTool</code> / recording tools) in the argument list.
+        </li>
+      </ol>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="task">
+      <h3><span class="badge new">Step 3</span> Wire handlers for new tools</h3>
+      <p><strong>File</strong>: <code>apps/server/src/mcp/toolkits/preview/handlers.ts</code></p>
+      <ol>
+        <li>Import new types and tools.</li>
+        <li>
+          Add to the <code>handlers</code> object:
+          <pre><code>preview_hover: (input) => invoke&lt;void&gt;("hover", input, input.timeoutMs).pipe(Effect.as(null)),
+preview_select: (input) => invoke&lt;void&gt;("select", input, input.timeoutMs).pipe(Effect.as(null)),
+preview_tab_list: () => invoke&lt;PreviewAutomationTabList&gt;("tabList", {}),
+preview_tab_switch: (input) => invoke&lt;PreviewAutomationStatus&gt;("tabSwitch", input),
+preview_tab_close: (input) => invoke&lt;void&gt;("tabClose", input).pipe(Effect.as(null)),</code></pre>
+        </li>
+        <li>Update <code>PreviewStandardToolkitHandlersLive</code> and <code>PreviewToolkitHandlersLive</code> to use the updated toolkits from Step 2.</li>
+      </ol>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="task">
+      <h3><span class="badge new">Step 4</span> Handle new operations in the renderer owner</h3>
+      <p><strong>File</strong>: <code>apps/web/src/components/preview/PreviewAutomationOwner.tsx</code></p>
+      <p>Add new <code>case</code> branches in the <code>handleRequest</code> switch statement. Follow the existing pattern: guard on <code>previewBridge && tabId</code> before IPC calls; throw <code>PreviewAutomationTargetUnavailableError</code> when unavailable.</p>
+      <ol>
+        <li>
+          <code>case "hover"</code>: delegates to a new <code>previewBridge.automation.hover(tabId, input)</code> IPC call (added in Step 5):
+          <pre><code>case "hover":
+  if (!previewBridge || !tabId) throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+  return await previewBridge.automation.hover(tabId, request.input as PreviewAutomationHoverInput);</code></pre>
+        </li>
+        <li>
+          <code>case "select"</code>: delegates to <code>previewBridge.automation.select(tabId, input)</code>:
+          <pre><code>case "select":
+  if (!previewBridge || !tabId) throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+  return await previewBridge.automation.select(tabId, request.input as PreviewAutomationSelectInput);</code></pre>
+        </li>
+        <li>
+          <code>case "tabList"</code>: <strong>no IPC call needed</strong> — reads from the renderer's own <code>previewStateStore</code>. The renderer already has all tab state:
+          <pre><code>case "tabList": {
+  const state = readThreadPreviewState(threadRef);
+  const activeTabId = state.snapshot?.activeTabId ?? null;
+  const tabs = Object.values(state.snapshot?.sessions ?? {}).map((session) => ({
+    tabId: session.tabId,
+    url: session.navStatus._tag !== "Idle" ? (session.navStatus.url ?? null) : null,
+    title: session.navStatus._tag !== "Idle" ? (session.navStatus.title ?? null) : null,
+    loading: session.navStatus._tag === "Loading",
+    active: session.tabId === activeTabId,
+  }));
+  return { tabs, activeTabId };
+}</code></pre>
+          <em>Note: inspect <code>previewStateStore.ts</code> to confirm the exact shape of <code>sessions</code> and <code>activeTabId</code> — the field names above may need adjustment to match the actual store shape.</em>
+        </li>
+        <li>
+          <code>case "tabSwitch"</code>: updates the right panel and reports the new owner state:
+          <pre><code>case "tabSwitch": {
+  const input = request.input as PreviewAutomationTabSwitchInput;
+  useRightPanelStore.getState().openBrowser(threadRef, input.tabId);
+  // Report the new active tab to the broker so subsequent requests target it
+  await reportCurrentAutomationOwner();
+  return await currentStatus(threadRef, visible);
+}</code></pre>
+        </li>
+        <li>
+          <code>case "tabClose"</code>: calls the existing <code>previewBridge.closeTab</code> IPC:
+          <pre><code>case "tabClose": {
+  const input = request.input as PreviewAutomationTabCloseInput;
+  if (!previewBridge) throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+  await previewBridge.closeTab(input.tabId);
+  return null;
+}</code></pre>
+        </li>
+      </ol>
+      <p><strong>Note on <code>reportCurrentAutomationOwner</code></strong>: this function is defined inside the component and captures <code>threadRef</code> / <code>visible</code> / the current active tab state. The <code>tabSwitch</code> case above calls it after the right panel is updated so the owner's <code>tabId</code> reflects the switched tab in the broker.</p>
+    </div>
+
+    <!-- STEP 5 -->
+    <div class="task">
+      <h3><span class="badge new">Step 5</span> Add desktop IPC methods for hover and select</h3>
+      <p><strong>File</strong>: <code>apps/desktop/src/ipc/methods/preview.ts</code></p>
+      <p>Tab list and tab switch do not need new IPC methods (renderer-side only). Tab close already uses the existing <code>closeTab</code>. Only hover and select need new IPC wiring.</p>
+      <ol>
+        <li>
+          Define <code>DesktopPreviewAutomationHoverInputSchema</code> and <code>DesktopPreviewAutomationSelectInputSchema</code> following the same pattern as <code>DesktopPreviewAutomationClickInputSchema</code> (a <code>Schema.Struct</code> wrapping <code>tabId + input</code>).
+        </li>
+        <li>
+          Add <code>automationHover</code> IPC method:
+          <pre><code>export const automationHover = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_AUTOMATION_HOVER_CHANNEL,
+  payload: DesktopPreviewAutomationHoverInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.automationHover")(function* ({ tabId, input }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.automationHover(tabId, input);
+  }),
+});</code></pre>
+        </li>
+        <li>
+          Add <code>automationSelect</code> IPC method with the same pattern.
+        </li>
+        <li>
+          Add the two new channel constants (<code>PREVIEW_AUTOMATION_HOVER_CHANNEL</code>, <code>PREVIEW_AUTOMATION_SELECT_CHANNEL</code>) wherever the other channel constants are defined (look for <code>IpcChannels</code>).
+        </li>
+        <li>
+          Export <code>automationHover</code> and <code>automationSelect</code> from the preview IPC catalog.
+        </li>
+        <li>
+          Expose the two new methods on <code>window.desktopBridge.preview.automation</code> in the preload/contextBridge setup so the renderer can call them. Find where <code>automation.click</code> is exposed and follow the same pattern.
+        </li>
+      </ol>
+    </div>
+
+    <!-- STEP 6 -->
+    <div class="task">
+      <h3><span class="badge new">Step 6</span> Implement hover, select, and click extension in PreviewManager</h3>
+      <p><strong>File</strong>: <code>apps/desktop/src/preview/Manager.ts</code></p>
+
+      <h3>6a — Extend performAutomationClick for button and clickCount</h3>
+      <p>In <code>performAutomationClick</code> (around line 1990), read <code>input.button</code> and <code>input.clickCount</code>:</p>
+      <pre><code>const button = input.button ?? "left";
+const clickCount = input.clickCount ?? 1;
+
+yield* send("Input.dispatchMouseEvent", {
+  type: "mousePressed",
+  ...point,
+  button,
+  clickCount,
+});
+yield* send("Input.dispatchMouseEvent", {
+  type: "mouseReleased",
+  ...point,
+  button,
+  clickCount,
+});
+
+// For double-click, repeat the press+release
+if (clickCount === 2) {
+  yield* send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...point,
+    button,
+    clickCount,
+  });
+  yield* send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...point,
+    button,
+    clickCount,
+  });
+}</code></pre>
+
+      <h3>6b — Add performAutomationHover</h3>
+      <p>Add a new <code>performAutomationHover</code> function and <code>automationHover</code> wrapper following the same structure as <code>performAutomationClick</code>:</p>
+      <ol>
+        <li>Enable runtime and ignore-input: same as click</li>
+        <li>Resolve the target point using the existing <code>resolveClickPoint</code> (reuse — it already handles locator/selector/coordinate)</li>
+        <li>Validate viewport bounds (same check as click)</li>
+        <li>Emit pointer move animation:
+          <pre><code>yield* emitPointerEvent({ tabId, phase: "move", ...point, ... });
+yield* Effect.sleep(AGENT_CURSOR_MOVE_MS);</code></pre>
+        </li>
+        <li>Send the mouseMoved CDP event:
+          <pre><code>yield* send("Input.dispatchMouseEvent", {
+  type: "mouseMoved",
+  ...point,
+  button: "none",
+});</code></pre>
+        </li>
+        <li>Dwell at the position to allow CSS :hover to activate and tooltip timers to fire:
+          <pre><code>const dwellMs = input.dwellMs ?? 300;
+if (dwellMs > 0) yield* Effect.sleep(dwellMs);</code></pre>
+        </li>
+        <li>Do <strong>not</strong> send mousePressed/mouseReleased.</li>
+        <li>Add <code>automationHover</code> to the <code>makeNativeOperations</code> return object and to the <code>PreviewManager</code> service interface.</li>
+      </ol>
+
+      <h3>6c — Add performAutomationSelect</h3>
+      <p>Add a new <code>performAutomationSelect</code> and <code>automationSelect</code>:</p>
+      <ol>
+        <li>Enable runtime, optionally inject Playwright (needed for locator resolution)</li>
+        <li>Resolve the element using the Playwright injected runtime (same pattern as <code>focusAutomationTarget</code> in <code>automationType</code>)</li>
+        <li>
+          Run a CDP evaluate to set the selected option and dispatch events:
+          <pre><code>// value mode:
+element.value = ${valueJson};
+
+// label mode (substring match):
+const option = Array.from(element.options).find(o =>
+  o.text.includes(${labelJson})
+);
+if (option) element.value = option.value;
+else return { notFound: true };
+
+// index mode:
+element.selectedIndex = ${index};
+
+element.dispatchEvent(new Event("input", { bubbles: true }));
+element.dispatchEvent(new Event("change", { bubbles: true }));</code></pre>
+        </li>
+        <li>Handle <code>{ notFound: true }</code> and <code>{ invalidSelector: true }</code> results using the existing error classes.</li>
+        <li>Add <code>automationSelect</code> to the <code>makeNativeOperations</code> return and the <code>PreviewManager</code> service interface.</li>
+      </ol>
+    </div>
+
+    <!-- STEP 7 -->
+    <div class="task">
+      <h3><span class="badge extend">Step 7</span> Update the PreviewManager service interface</h3>
+      <p>The <code>PreviewManager</code> service interface is declared starting around line 2650 in <code>Manager.ts</code>. Add the two new method signatures:</p>
+      <pre><code>readonly automationHover: (
+  tabId: string,
+  input: PreviewAutomationHoverInput,
+) =&gt; Effect.Effect&lt;void, PreviewManagerError&gt;;
+
+readonly automationSelect: (
+  tabId: string,
+  input: PreviewAutomationSelectInput,
+) =&gt; Effect.Effect&lt;void, PreviewManagerError&gt;;</code></pre>
+      <p>Then wire them in the <code>PreviewManager.of({ ... })</code> call at the bottom of <code>make</code>.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="quality-rules">
+    <h2 id="quality-rules">Code Quality Rules</h2>
+    <ul>
+      <li>Do not use <code>any</code>. All new schemas must use Effect <code>Schema</code> types.</li>
+      <li>Reuse <code>resolveClickPoint</code> for hover's point resolution — do not duplicate the locator-resolution logic.</li>
+      <li>Reuse <code>focusAutomationTarget</code> logic pattern for select's element resolution — or extract a shared <code>resolveElement</code> helper if the duplication would be more than 20 lines.</li>
+      <li>Follow the <code>Effect.fn("PreviewManager.automationHover")</code> span-naming convention.</li>
+      <li>All new input schemas must match the annotation style of existing ones: <code>.annotate({ description: "..." })</code> on every field.</li>
+      <li>New channel constants must follow the <code>PREVIEW_AUTOMATION_*_CHANNEL</code> naming in <code>IpcChannels</code>.</li>
+      <li>No new npm dependencies. The Playwright injected runtime, CDP, and Effect are sufficient.</li>
+      <li>The <code>PreviewAutomationOperation</code> literal union is checked exhaustively in TypeScript switch statements. The compiler will flag any missed cases — fix them all.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="validation">
+    <h2 id="validation">Testing and Validation</h2>
+    <ol>
+      <li>Run the TypeScript compiler across the monorepo: <code>pnpm tsc --noEmit</code> — the extended <code>PreviewAutomationOperation</code> union will surface any missed switch branches.</li>
+      <li>Run existing tests: <code>pnpm test</code> or inspect <code>package.json</code> for the test command in <code>apps/server</code> and <code>apps/desktop</code>.</li>
+      <li>Manually test <strong>hover</strong>: open a page with a tooltip or a hover-triggered dropdown; call <code>preview_hover</code> on the trigger element; call <code>preview_snapshot</code> to confirm the tooltip is now visible in the screenshot.</li>
+      <li>Manually test <strong>select</strong>: navigate to a page with a <code>&lt;select&gt;</code>; call <code>preview_select</code> with a <code>value</code> or <code>label</code>; call <code>preview_evaluate</code> to confirm <code>element.value</code> changed.</li>
+      <li>Manually test <strong>double-click</strong>: open a rich text editor and double-click a word; confirm word selection.</li>
+      <li>Manually test <strong>right-click</strong>: call <code>preview_click</code> with <code>button: "right"</code>; call <code>preview_snapshot</code> to confirm a context menu appeared.</li>
+      <li>Manually test <strong>tab_list</strong>: open two tabs via <code>preview_open</code> (second with <code>reuseExistingTab: false</code>); call <code>preview_tab_list</code>; confirm both tabs appear.</li>
+      <li>Manually test <strong>tab_switch</strong>: call <code>preview_tab_switch</code> with the non-active tabId; confirm subsequent <code>preview_snapshot</code> targets the new tab.</li>
+      <li>Manually test <strong>tab_close</strong>: close one of two tabs; call <code>preview_tab_list</code> to confirm only one remains.</li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="acceptance-criteria">
+    <h2 id="acceptance-criteria">Acceptance Criteria</h2>
+    <ul>
+      <li><code>pnpm tsc --noEmit</code> passes with no new errors across all packages.</li>
+      <li><code>PreviewAutomationOperation</code> includes all 17 literals (12 existing + 5 new).</li>
+      <li><code>preview_hover</code> successfully reveals a CSS :hover-triggered tooltip visible in the subsequent snapshot screenshot.</li>
+      <li><code>preview_select</code> changes a <code>&lt;select&gt;</code> element's selected option by value, label, and index.</li>
+      <li><code>preview_click</code> with <code>{ button: "right" }</code> opens a context menu.</li>
+      <li><code>preview_click</code> with <code>{ clickCount: 2 }</code> fires a double-click event (verifiable with <code>preview_evaluate</code> or a snapshot).</li>
+      <li><code>preview_tab_list</code> returns accurate entries for all open tabs in the thread.</li>
+      <li><code>preview_tab_switch</code> changes the active tab and subsequent operations target the new tab.</li>
+      <li><code>preview_tab_close</code> closes the specified tab and it no longer appears in <code>preview_tab_list</code>.</li>
+      <li>All existing MCP tools continue to work without regression.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="risks">
+    <h2 id="risks">Risks and Notes</h2>
+    <ul>
+      <li>
+        <strong>tabList renderer-side data shape</strong>: The <code>tabList</code> case reads from <code>previewStateStore</code> in the renderer. The exact field names (<code>sessions</code>, <code>activeTabId</code>, <code>navStatus</code>) must be verified against <code>apps/web/src/previewStateStore.ts</code> before implementation. A wrong field name will silently return empty arrays.
+      </li>
+      <li>
+        <strong>tabSwitch and broker owner</strong>: After switching tabs, the broker's <code>invoke</code> resolves the owner's <code>tabId</code> from the <code>PreviewAutomationOwner</code> state. The <code>reportCurrentAutomationOwner()</code> call in the tabSwitch case must fire after the store is updated, not before.
+      </li>
+      <li>
+        <strong>hover dwell time</strong>: 300ms is sufficient for most tooltips. Very slow tooltip animations (e.g., 500ms+ CSS transitions) will require a higher <code>dwellMs</code>. Document this in the tool description.
+      </li>
+      <li>
+        <strong>double-click CDP dispatch</strong>: Some browsers fire <code>dblclick</code> only when two <code>mousedown</code> events arrive within the system double-click interval. With CDP, sending two press+release pairs in sequence with <code>clickCount: 2</code> on both is the correct pattern — but the CDP <code>clickCount</code> field is specifically for this. Test against a <code>dblclick</code> event listener to confirm.
+      </li>
+      <li>
+        <strong>select by label</strong>: The substring match in the evaluate JS is case-sensitive. If the page trims whitespace from option text, the match may fail for labels with leading/trailing spaces. Trim both sides in the comparison.
+      </li>
+      <li>
+        <strong>Toolkit exhaustiveness</strong>: Both <code>PreviewToolkit</code> and <code>PreviewStandardToolkit</code> in <code>tools.ts</code> must include the new tools. Forgetting to add them to one of the two toolkits will cause them to silently not appear in that MCP session type.
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

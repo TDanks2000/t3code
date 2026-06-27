@@ -1,3 +1,4 @@
+import { NonNegativeInt } from "@t3tools/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import * as Effect from "effect/Effect";
@@ -8,11 +9,13 @@ import { toPersistenceSqlError } from "../Errors.ts";
 import {
   TurnCostRepository,
   TurnCostRow,
+  type AccountLimitSnapshotRow,
   type TurnCostRepositoryShape,
 } from "../Services/TurnCosts.ts";
 
 const makeTurnCostRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const DEFAULT_LIST_LIMIT = 200;
 
   const insertTurnCostRow = SqlSchema.void({
     Request: TurnCostRow,
@@ -53,10 +56,19 @@ const makeTurnCostRepository = Effect.gen(function* () {
       `,
   });
 
+  const deleteTurnCostByTurnId = SqlSchema.void({
+    Request: Schema.Struct({ turnId: Schema.String }),
+    execute: ({ turnId }) =>
+      sql`
+        DELETE FROM projection_turn_costs
+        WHERE turn_id = ${turnId}
+      `,
+  });
+
   const listTurnCostsByThreadId = SqlSchema.findAll({
-    Request: Schema.Struct({ threadId: Schema.String }),
+    Request: Schema.Struct({ threadId: Schema.String, limit: NonNegativeInt }),
     Result: TurnCostRow,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, limit }) =>
       sql`
         SELECT
           turn_id AS "turnId",
@@ -76,13 +88,14 @@ const makeTurnCostRepository = Effect.gen(function* () {
         FROM projection_turn_costs
         WHERE thread_id = ${threadId}
         ORDER BY created_at ASC
+        LIMIT ${limit}
       `,
   });
 
   const listTurnCostsByProjectId = SqlSchema.findAll({
-    Request: Schema.Struct({ projectId: Schema.String }),
+    Request: Schema.Struct({ projectId: Schema.String, limit: NonNegativeInt }),
     Result: TurnCostRow,
-    execute: ({ projectId }) =>
+    execute: ({ projectId, limit }) =>
       sql`
         SELECT
           turn_id AS "turnId",
@@ -102,6 +115,54 @@ const makeTurnCostRepository = Effect.gen(function* () {
         FROM projection_turn_costs
         WHERE project_id = ${projectId}
         ORDER BY created_at ASC
+        LIMIT ${limit}
+      `,
+  });
+
+  const aggregateTurnCostsByThreadId = SqlSchema.findOne({
+    Request: Schema.Struct({ threadId: Schema.String }),
+    Result: Schema.Struct({
+      totalTurns: Schema.Int,
+      totalCostUsd: Schema.Number,
+      totalInputTokens: Schema.Int,
+      totalOutputTokens: Schema.Int,
+      totalCachedInputTokens: Schema.Int,
+      totalReasoningTokens: Schema.Int,
+    }),
+    execute: ({ threadId }) =>
+      sql`
+        SELECT
+          CAST(COUNT(*) AS INTEGER) AS "totalTurns",
+          COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
+          COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens",
+          COALESCE(SUM(cached_input_tokens), 0) AS "totalCachedInputTokens",
+          COALESCE(SUM(reasoning_tokens), 0) AS "totalReasoningTokens"
+        FROM projection_turn_costs
+        WHERE thread_id = ${threadId}
+      `,
+  });
+
+  const aggregateTurnCostsByAllThreads = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: Schema.Struct({
+      threadId: Schema.String,
+      totalTurns: Schema.Int,
+      totalCostUsd: Schema.Number,
+      totalInputTokens: Schema.Int,
+      totalOutputTokens: Schema.Int,
+    }),
+    execute: () =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          CAST(COUNT(*) AS INTEGER) AS "totalTurns",
+          COALESCE(SUM(cost_usd), 0) AS "totalCostUsd",
+          COALESCE(SUM(input_tokens), 0) AS "totalInputTokens",
+          COALESCE(SUM(output_tokens), 0) AS "totalOutputTokens"
+        FROM projection_turn_costs
+        GROUP BY thread_id
+        ORDER BY "totalCostUsd" DESC
       `,
   });
 
@@ -178,17 +239,21 @@ const makeTurnCostRepository = Effect.gen(function* () {
   });
 
   const insert: TurnCostRepositoryShape["insert"] = (row) =>
-    insertTurnCostRow(row).pipe(
-      Effect.mapError(toPersistenceSqlError("TurnCostRepository.insert:query")),
-    );
+    sql
+      .withTransaction(
+        deleteTurnCostByTurnId({ turnId: row.turnId }).pipe(
+          Effect.flatMap(() => insertTurnCostRow(row)),
+        ),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("TurnCostRepository.insert:query")));
 
-  const listByThreadId: TurnCostRepositoryShape["listByThreadId"] = (threadId) =>
-    listTurnCostsByThreadId({ threadId }).pipe(
+  const listByThreadId: TurnCostRepositoryShape["listByThreadId"] = (threadId, options) =>
+    listTurnCostsByThreadId({ threadId, limit: options?.limit ?? DEFAULT_LIST_LIMIT }).pipe(
       Effect.mapError(toPersistenceSqlError("TurnCostRepository.listByThreadId:query")),
     );
 
-  const listByProjectId: TurnCostRepositoryShape["listByProjectId"] = (projectId) =>
-    listTurnCostsByProjectId({ projectId }).pipe(
+  const listByProjectId: TurnCostRepositoryShape["listByProjectId"] = (projectId, options) =>
+    listTurnCostsByProjectId({ projectId, limit: options?.limit ?? DEFAULT_LIST_LIMIT }).pipe(
       Effect.mapError(toPersistenceSqlError("TurnCostRepository.listByProjectId:query")),
     );
 
@@ -234,14 +299,103 @@ const makeTurnCostRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByModelAll:query")),
     );
 
+  const aggregateByThreadId: TurnCostRepositoryShape["aggregateByThreadId"] = (threadId) =>
+    aggregateTurnCostsByThreadId({ threadId }).pipe(
+      Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByThreadId:query")),
+    );
+
+  const aggregateByAllThreads: TurnCostRepositoryShape["aggregateByAllThreads"] =
+    aggregateTurnCostsByAllThreads({}).pipe(
+      Effect.mapError(toPersistenceSqlError("TurnCostRepository.aggregateByAllThreads:query")),
+    );
+
+  const listLatestAccountLimitSnapshotRows = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: Schema.Struct({
+      provider: Schema.String,
+      threadId: Schema.String,
+      createdAt: Schema.String,
+      rateLimitsJson: Schema.String,
+    }),
+    execute: () =>
+      sql`
+        SELECT
+          latest.provider,
+          latest.thread_id AS "threadId",
+          latest.created_at AS "createdAt",
+          latest.payload_json AS "rateLimitsJson"
+        FROM (
+          SELECT
+            events.provider,
+            events.thread_id,
+            events.created_at,
+            events.payload_json,
+            ROW_NUMBER() OVER (
+              PARTITION BY events.provider
+              ORDER BY events.created_at DESC, events.activity_id DESC
+            ) AS row_num
+          FROM (
+            SELECT
+              COALESCE(
+                NULLIF(session.provider_instance_id, ''),
+                NULLIF(session.provider_name, ''),
+                NULLIF(json_extract(thread.model_selection_json, '$.instanceId'), ''),
+                NULLIF(json_extract(thread.model_selection_json, '$.provider'), ''),
+                'unknown'
+              ) AS provider,
+              activity.thread_id,
+              activity.created_at,
+              activity.activity_id,
+              activity.payload_json
+            FROM projection_thread_activities AS activity
+            LEFT JOIN projection_thread_sessions AS session
+              ON session.thread_id = activity.thread_id
+            LEFT JOIN projection_threads AS thread
+              ON thread.thread_id = activity.thread_id
+            WHERE activity.kind = 'account.rate-limits.updated'
+          ) AS events
+          WHERE events.provider IS NOT NULL
+        ) AS latest
+        WHERE latest.row_num = 1
+        ORDER BY latest.created_at DESC
+      `,
+  });
+
+  const listLatestAccountLimitSnapshots: TurnCostRepositoryShape["listLatestAccountLimitSnapshots"] =
+    listLatestAccountLimitSnapshotRows({}).pipe(
+      Effect.map(
+        (rows): ReadonlyArray<AccountLimitSnapshotRow> =>
+          rows.map((row) => {
+            let rateLimits: unknown = {};
+            try {
+              rateLimits = JSON.parse(row.rateLimitsJson);
+            } catch {
+              rateLimits = {};
+            }
+            return {
+              provider: row.provider,
+              threadId: row.threadId,
+              createdAt: row.createdAt,
+              rateLimits,
+            };
+          }),
+      ),
+      Effect.mapError(
+        toPersistenceSqlError("TurnCostRepository.listLatestAccountLimitSnapshots:query"),
+      ),
+    );
+
   return {
     insert,
     listByThreadId,
     listByProjectId,
     aggregateByProject,
+    aggregateByThreadId,
     aggregateAll,
     aggregateByProviderAll,
     aggregateByModelAll,
+    aggregateByAllThreads,
+    listLatestAccountLimitSnapshots,
   } satisfies TurnCostRepositoryShape;
 });
 

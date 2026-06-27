@@ -1301,13 +1301,30 @@ export const UsageByProviderEntry = Schema.Struct({
 export type UsageByProviderEntry = typeof UsageByProviderEntry.Type;
 
 export const UsageByModelEntry = Schema.Struct({
-  model: TrimmedNonEmptyString,
+  model: Schema.String,
   totalTurns: NonNegativeInt,
   totalCostUsd: Schema.Number,
   totalInputTokens: NonNegativeInt,
   totalOutputTokens: NonNegativeInt,
 });
 export type UsageByModelEntry = typeof UsageByModelEntry.Type;
+
+export const UsageByThreadEntry = Schema.Struct({
+  threadId: Schema.String,
+  totalTurns: NonNegativeInt,
+  totalCostUsd: Schema.Number,
+  totalInputTokens: NonNegativeInt,
+  totalOutputTokens: NonNegativeInt,
+});
+export type UsageByThreadEntry = typeof UsageByThreadEntry.Type;
+
+export const AccountLimitSnapshot = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  threadId: Schema.optional(ThreadId),
+  createdAt: IsoDateTime,
+  rateLimits: Schema.Unknown,
+});
+export type AccountLimitSnapshot = typeof AccountLimitSnapshot.Type;
 
 export const CostAggregate = Schema.Struct({
   projectId: Schema.optional(ProjectId),
@@ -1321,6 +1338,10 @@ export const CostAggregate = Schema.Struct({
   totalReasoningTokens: NonNegativeInt,
   byProvider: Schema.Array(UsageByProviderEntry),
   byModel: Schema.Array(UsageByModelEntry),
+  byThread: Schema.Array(UsageByThreadEntry),
+  accountLimits: Schema.Array(AccountLimitSnapshot).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
 export type CostAggregate = typeof CostAggregate.Type;
 

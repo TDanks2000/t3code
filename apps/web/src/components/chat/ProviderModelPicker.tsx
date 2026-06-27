@@ -37,6 +37,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   disabled?: boolean;
   terminalOpen?: boolean;
   open?: boolean;
+  forceShowBadge?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onOpenChange?: (open: boolean) => void;
@@ -69,7 +70,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const duplicateDriverCount = props.instanceEntries.filter(
     (entry) => activeEntry !== null && entry.driverKind === activeEntry.driverKind,
   ).length;
-  const showInstanceBadge = Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
+  const showInstanceBadge =
+    props.forceShowBadge || Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
 
   const setIsMenuOpen = (open: boolean) => {
     props.onOpenChange?.(open);

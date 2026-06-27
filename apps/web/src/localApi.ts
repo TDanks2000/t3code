@@ -5,8 +5,6 @@ import type {
   ToolInvocationQueryFilter,
   ToolInvocationRecord,
 } from "@t3tools/contracts";
-import type { WsRpcClient } from "@t3tools/client-runtime";
-
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { showContextMenuFallback } from "./contextMenuFallback";
 import { readBrowserClientSettings, writeBrowserClientSettings } from "./clientPersistenceStorage";
@@ -71,59 +69,20 @@ function createBrowserLocalApi(): LocalApi {
       },
     },
     server: {
-      getConfig: () =>
-        rpcClient ? rpcClient.server.getConfig() : Promise.reject(unavailableLocalBackendError()),
-      refreshProviders: () =>
-        rpcClient
-          ? rpcClient.server.refreshProviders()
-          : Promise.reject(unavailableLocalBackendError()),
-      updateProvider: (input) =>
-        rpcClient
-          ? rpcClient.server.updateProvider(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      upsertKeybinding: (input) =>
-        rpcClient
-          ? rpcClient.server.upsertKeybinding(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      removeKeybinding: (input) =>
-        rpcClient
-          ? rpcClient.server.removeKeybinding(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      getSettings: () =>
-        rpcClient ? rpcClient.server.getSettings() : Promise.reject(unavailableLocalBackendError()),
-      updateSettings: (patch) =>
-        rpcClient
-          ? rpcClient.server.updateSettings(patch)
-          : Promise.reject(unavailableLocalBackendError()),
-      discoverSourceControl: () =>
-        rpcClient
-          ? rpcClient.server.discoverSourceControl()
-          : Promise.reject(unavailableLocalBackendError()),
-      getTraceDiagnostics: () =>
-        rpcClient
-          ? rpcClient.server.getTraceDiagnostics()
-          : Promise.reject(unavailableLocalBackendError()),
-      getProcessDiagnostics: () =>
-        rpcClient
-          ? rpcClient.server.getProcessDiagnostics()
-          : Promise.reject(unavailableLocalBackendError()),
-      getProcessResourceHistory: (input) =>
-        rpcClient
-          ? rpcClient.server.getProcessResourceHistory(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      signalProcess: (input) =>
-        rpcClient
-          ? rpcClient.server.signalProcess(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      getUsageSummary: (input) =>
-        rpcClient
-          ? rpcClient.server.getUsageSummary(input)
-          : Promise.reject(unavailableLocalBackendError()),
-      listToolInvocations: async (input) => {
-        if (!rpcClient) throw unavailableLocalBackendError();
-        const result = await rpcClient.server.listToolInvocations(input);
-        return [...result];
-      },
+      getConfig: () => Promise.reject(unavailableLocalBackendError()),
+      refreshProviders: () => Promise.reject(unavailableLocalBackendError()),
+      updateProvider: () => Promise.reject(unavailableLocalBackendError()),
+      upsertKeybinding: () => Promise.reject(unavailableLocalBackendError()),
+      removeKeybinding: () => Promise.reject(unavailableLocalBackendError()),
+      getSettings: () => Promise.reject(unavailableLocalBackendError()),
+      updateSettings: () => Promise.reject(unavailableLocalBackendError()),
+      discoverSourceControl: () => Promise.reject(unavailableLocalBackendError()),
+      getTraceDiagnostics: () => Promise.reject(unavailableLocalBackendError()),
+      getProcessDiagnostics: () => Promise.reject(unavailableLocalBackendError()),
+      getProcessResourceHistory: () => Promise.reject(unavailableLocalBackendError()),
+      signalProcess: () => Promise.reject(unavailableLocalBackendError()),
+      getUsageSummary: () => Promise.reject(unavailableLocalBackendError()),
+      listToolInvocations: () => Promise.reject(unavailableLocalBackendError()),
     },
   };
 }

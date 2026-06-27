@@ -1,9 +1,9 @@
-import { PlusIcon } from "lucide-react";
+import { MessagesSquareIcon, PlusIcon, SparklesIcon } from "lucide-react";
 
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { Button } from "./ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
-import { SidebarInset } from "./ui/sidebar";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./ui/empty";
+import { SidebarInset, SidebarTrigger } from "./ui/sidebar";
 import { isElectron } from "../env";
 import { cn } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
@@ -43,6 +43,9 @@ export function NoActiveThreadState() {
         <Empty className="flex-1">
           <div className="w-full max-w-lg px-8 py-12">
             <EmptyHeader className="max-w-none">
+              <EmptyMedia variant="icon">
+                <MessagesSquareIcon />
+              </EmptyMedia>
               <EmptyTitle className="text-foreground text-xl">Pick a thread to continue</EmptyTitle>
               <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
                 Select an existing thread or create a new one to get started.
@@ -98,6 +101,9 @@ export function NoThreadsState() {
         <Empty className="flex-1">
           <div className="w-full max-w-lg px-8 py-12">
             <EmptyHeader className="max-w-none">
+              <EmptyMedia variant="icon">
+                <SparklesIcon />
+              </EmptyMedia>
               <EmptyTitle className="text-foreground text-xl">
                 No threads in this project yet
               </EmptyTitle>

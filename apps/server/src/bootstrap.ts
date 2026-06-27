@@ -96,6 +96,7 @@ export const readBootstrapEnvelope = Effect.fn("readBootstrapEnvelope")(function
 
     const cleanup = () => {
       stream.removeListener("error", handleError);
+      stream.once("error", () => {});
       input.removeListener("line", handleLine);
       input.removeListener("close", handleClose);
       input.close();
@@ -147,7 +148,7 @@ export const readBootstrapEnvelope = Effect.fn("readBootstrapEnvelope")(function
 
 const isUnavailableBootstrapFdError = Predicate.compose(
   Predicate.hasProperty("code"),
-  (_) => _.code === "EBADF" || _.code === "ENOENT",
+  (_) => _.code === "EBADF" || _.code === "ENOENT" || _.code === "ECONNRESET",
 );
 
 const isFdReady = (fd: number) =>

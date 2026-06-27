@@ -3,11 +3,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import {
+  type PreviewAutomationHoverInput,
   type PreviewAutomationNavigateInput,
   type PreviewAutomationOpenInput,
   type PreviewAutomationOwner as PreviewAutomationOwnerState,
   type PreviewAutomationRequest,
+  type PreviewAutomationSelectInput,
   type PreviewAutomationStatus,
+  type PreviewAutomationTabCloseInput,
+  type PreviewAutomationTabSwitchInput,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
@@ -344,6 +348,48 @@ export function PreviewAutomationOwner(props: {
               });
             }
             return artifact;
+          }
+          case "hover":
+            if (!previewBridge || !tabId) {
+              throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+            }
+            return await previewBridge.automation.hover(
+              tabId,
+              request.input as PreviewAutomationHoverInput,
+            );
+          case "select":
+            if (!previewBridge || !tabId) {
+              throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+            }
+            return await previewBridge.automation.select(
+              tabId,
+              request.input as PreviewAutomationSelectInput,
+            );
+          case "tabList": {
+            const tabListState = readThreadPreviewState(threadRef);
+            const activeTabId = tabListState.activeTabId;
+            const tabs = Object.values(tabListState.sessions).map((session) => ({
+              tabId: session.tabId,
+              url: session.navStatus._tag !== "Idle" ? session.navStatus.url : null,
+              title: session.navStatus._tag !== "Idle" ? session.navStatus.title : null,
+              loading: session.navStatus._tag === "Loading",
+              active: session.tabId === activeTabId,
+            }));
+            return { tabs, activeTabId };
+          }
+          case "tabSwitch": {
+            const tabSwitchInput = request.input as PreviewAutomationTabSwitchInput;
+            useRightPanelStore.getState().openBrowser(threadRef, tabSwitchInput.tabId);
+            await reportCurrentAutomationOwner();
+            return await currentStatus(threadRef, visible);
+          }
+          case "tabClose": {
+            const tabCloseInput = request.input as PreviewAutomationTabCloseInput;
+            if (!previewBridge) {
+              throw new PreviewAutomationTargetUnavailableError(unavailableTarget);
+            }
+            await previewBridge.closeTab(tabCloseInput.tabId);
+            return null;
           }
         }
       } catch (cause) {

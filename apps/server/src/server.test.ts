@@ -817,6 +817,15 @@ const buildAppUnderTest = (options?: {
                 totalCachedInputTokens: 0,
                 totalReasoningTokens: 0,
               }),
+            aggregateByThreadId: () =>
+              Effect.succeed({
+                totalTurns: 0,
+                totalCostUsd: 0,
+                totalInputTokens: 0,
+                totalOutputTokens: 0,
+                totalCachedInputTokens: 0,
+                totalReasoningTokens: 0,
+              }),
             aggregateAll: Effect.succeed({
               totalTurns: 0,
               totalCostUsd: 0,
@@ -827,6 +836,8 @@ const buildAppUnderTest = (options?: {
             }),
             aggregateByProviderAll: Effect.succeed([]),
             aggregateByModelAll: Effect.succeed([]),
+            aggregateByAllThreads: Effect.succeed([]),
+            listLatestAccountLimitSnapshots: Effect.succeed([]),
           }),
         ),
       ),

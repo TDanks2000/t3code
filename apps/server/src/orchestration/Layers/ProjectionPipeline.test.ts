@@ -1038,6 +1038,20 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         assert.isTrue(yield* exists(threadAttachmentPath));
         assert.isTrue(yield* exists(otherThreadAttachmentPath));
 
+        // Browser screenshots persisted under the screenshots subdir should be
+        // reaped for the deleted thread but left intact for other threads.
+        const screenshotsDir = path.join(attachmentsDir, "screenshots");
+        const threadScreenshotPath = path.join(screenshotsDir, `${attachmentId}.png`);
+        const otherThreadScreenshotPath = path.join(
+          screenshotsDir,
+          `${otherThreadAttachmentId}.png`,
+        );
+        yield* fileSystem.makeDirectory(screenshotsDir, { recursive: true });
+        yield* fileSystem.writeFileString(threadScreenshotPath, "shot-delete");
+        yield* fileSystem.writeFileString(otherThreadScreenshotPath, "shot-other");
+        assert.isTrue(yield* exists(threadScreenshotPath));
+        assert.isTrue(yield* exists(otherThreadScreenshotPath));
+
         yield* appendAndProject({
           type: "thread.deleted",
           eventId: EventId.make("evt-delete-files-4"),
@@ -1056,6 +1070,8 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
 
         assert.isFalse(yield* exists(threadAttachmentPath));
         assert.isTrue(yield* exists(otherThreadAttachmentPath));
+        assert.isFalse(yield* exists(threadScreenshotPath));
+        assert.isTrue(yield* exists(otherThreadScreenshotPath));
       }),
     );
   },

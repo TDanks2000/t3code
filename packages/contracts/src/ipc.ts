@@ -90,12 +90,14 @@ import type {
 import {
   PreviewAutomationClickInput,
   PreviewAutomationEvaluateInput,
+  PreviewAutomationHoverInput,
   PreviewAutomationOwner,
   PreviewAutomationOwnerIdentity,
   PreviewAutomationPressInput,
   PreviewAutomationRequest,
   PreviewAutomationResponse,
   PreviewAutomationScrollInput,
+  PreviewAutomationSelectInput,
   PreviewAutomationSnapshot,
   PreviewAutomationStatus,
   PreviewAutomationTypeInput,
@@ -897,6 +899,16 @@ export const DesktopPreviewAutomationWaitForInputSchema = Schema.Struct({
   input: PreviewAutomationWaitForInput,
 });
 
+export const DesktopPreviewAutomationHoverInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  input: PreviewAutomationHoverInput,
+});
+
+export const DesktopPreviewAutomationSelectInputSchema = Schema.Struct({
+  tabId: DesktopPreviewTabIdSchema,
+  input: PreviewAutomationSelectInput,
+});
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -1010,6 +1022,8 @@ export interface DesktopPreviewBridge {
     scroll: (tabId: string, input: PreviewAutomationScrollInput) => Promise<void>;
     evaluate: (tabId: string, input: PreviewAutomationEvaluateInput) => Promise<unknown>;
     waitFor: (tabId: string, input: PreviewAutomationWaitForInput) => Promise<void>;
+    hover: (tabId: string, input: PreviewAutomationHoverInput) => Promise<void>;
+    select: (tabId: string, input: PreviewAutomationSelectInput) => Promise<void>;
   };
   onStateChange: (listener: (tabId: string, state: DesktopPreviewTabState) => void) => () => void;
   onPointerEvent: (listener: (event: DesktopPreviewPointerEvent) => void) => () => void;

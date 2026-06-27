@@ -1855,15 +1855,23 @@ const makeWsRpcLayer = (currentSession: EnvironmentAuth.AuthenticatedSession) =>
                 totalCachedInputTokens: 0,
                 totalReasoningTokens: 0,
               };
-              const [totals, byProvider, byModel] = yield* Effect.all([
-                (input.projectId
+              const totalsEffect = input.threadId
+                ? turnCostRepository.aggregateByThreadId(input.threadId)
+                : input.projectId
                   ? turnCostRepository.aggregateByProject(input.projectId)
-                  : turnCostRepository.aggregateAll
-                ).pipe(Effect.catch(() => Effect.succeed(emptyTotals))),
-                turnCostRepository.aggregateByProviderAll.pipe(
-                  Effect.catch(() => Effect.succeed([])),
-                ),
-                turnCostRepository.aggregateByModelAll.pipe(Effect.catch(() => Effect.succeed([]))),
+                  : turnCostRepository.aggregateAll;
+              const [totals, byProvider, byModel, byThread, accountLimits] = yield* Effect.all([
+                totalsEffect.pipe(Effect.orElseSucceed(() => emptyTotals)),
+                turnCostRepository.aggregateByProviderAll.pipe(Effect.orElseSucceed(() => [])),
+                turnCostRepository.aggregateByModelAll.pipe(Effect.orElseSucceed(() => [])),
+                input.threadId || input.projectId
+                  ? Effect.succeed([])
+                  : turnCostRepository.aggregateByAllThreads.pipe(Effect.orElseSucceed(() => [])),
+                input.threadId || input.projectId
+                  ? Effect.succeed([])
+                  : turnCostRepository.listLatestAccountLimitSnapshots.pipe(
+                      Effect.orElseSucceed(() => []),
+                    ),
               ]);
               const agg = totals ?? emptyTotals;
               return {
@@ -1890,6 +1898,23 @@ const makeWsRpcLayer = (currentSession: EnvironmentAuth.AuthenticatedSession) =>
                     totalCostUsd: m.totalCostUsd,
                     totalInputTokens: m.totalInputTokens,
                     totalOutputTokens: m.totalOutputTokens,
+                  })),
+                byThread: byThread
+                  .filter((t) => t.threadId.trim().length > 0)
+                  .map((t) => ({
+                    threadId: t.threadId,
+                    totalTurns: t.totalTurns,
+                    totalCostUsd: t.totalCostUsd,
+                    totalInputTokens: t.totalInputTokens,
+                    totalOutputTokens: t.totalOutputTokens,
+                  })),
+                accountLimits: accountLimits
+                  .filter((entry) => entry.provider.trim().length > 0)
+                  .map((entry) => ({
+                    provider: entry.provider,
+                    threadId: ThreadId.make(entry.threadId),
+                    createdAt: entry.createdAt,
+                    rateLimits: entry.rateLimits,
                   })),
               };
             }),

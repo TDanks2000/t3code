@@ -60,12 +60,21 @@ export type WorkLogToolLifecycleStatus =
   | "declined"
   | "stopped";
 
-export type WorkEntryImagePreview = {
-  readonly kind: "workspace_file";
-  readonly id: string;
-  readonly name: string;
-  readonly path: string;
-};
+export type WorkEntryImagePreview =
+  | {
+      readonly kind: "workspace_file";
+      readonly id: string;
+      readonly name: string;
+      readonly path: string;
+    }
+  | {
+      // An image served directly by the server at a route-relative path
+      // (e.g. a browser screenshot persisted from preview_snapshot).
+      readonly kind: "server_path";
+      readonly id: string;
+      readonly name: string;
+      readonly src: string;
+    };
 
 export interface WorkLogEntry {
   id: string;
@@ -739,6 +748,28 @@ function toWorkspaceImagePreview(filePath: string): WorkEntryImagePreview {
   };
 }
 
+// Route-relative path the server persists preview_snapshot screenshots under.
+// Validated before rendering so a tool result can't point the UI elsewhere.
+const PREVIEW_SCREENSHOT_PATH_REGEX = /^\/attachments\/screenshots\/[A-Za-z0-9._-]+$/;
+
+/** Pulls a persisted browser-screenshot path out of an mcp_tool_call item
+ *  (preview_snapshot writes it to result.structuredContent.screenshot.previewPath). */
+function extractPreviewScreenshotPreview(item: unknown): WorkEntryImagePreview | null {
+  const result = asRecord(asRecord(item)?.result);
+  const structured = asRecord(result?.structuredContent);
+  const screenshot = asRecord(structured?.screenshot);
+  const previewPath = screenshot?.previewPath;
+  if (typeof previewPath !== "string" || !PREVIEW_SCREENSHOT_PATH_REGEX.test(previewPath)) {
+    return null;
+  }
+  return {
+    kind: "server_path",
+    id: `screenshot:${previewPath}`,
+    name: "Screenshot",
+    src: previewPath,
+  };
+}
+
 function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWorkLogEntry {
   const payload =
     activity.payload && typeof activity.payload === "object"
@@ -804,6 +835,10 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     if (data?.item !== undefined) {
       entry.toolData = data.item;
     }
+    const screenshotPreview = extractPreviewScreenshotPreview(data?.item);
+    if (screenshotPreview) {
+      entry.imagePreviews = [screenshotPreview];
+    }
   }
   if (itemType) {
     entry.itemType = itemType;
@@ -815,6 +850,16 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     const imagePaths = extractImageFilePaths(payload?.data ?? payload);
     if (imagePaths.length > 0) {
       entry.imagePreviews = imagePaths.map(toWorkspaceImagePreview);
+    }
+  }
+  // Surface images the agent writes/generates (file_change touching an image
+  // file) the same way as image_view, so the resulting picture shows inline.
+  if (!entry.imagePreviews && changedFiles.length > 0) {
+    const imagePaths = changedFiles.filter(isProbablyLocalImagePath);
+    if (imagePaths.length > 0) {
+      entry.imagePreviews = imagePaths
+        .slice(0, MAX_WORKSPACE_IMAGE_PREVIEWS)
+        .map(toWorkspaceImagePreview);
     }
   }
   if (toolCallId) {

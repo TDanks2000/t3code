@@ -34,6 +34,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
+import { TurnCostRepository } from "../../persistence/Services/TurnCosts.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import {
   ProviderService,
@@ -191,7 +192,10 @@ async function waitForThread(
 
 describe("ProviderRuntimeIngestion", () => {
   let runtime: ManagedRuntime.ManagedRuntime<
-    OrchestrationEngineService | ProviderRuntimeIngestionService | ProjectionSnapshotQuery,
+    | OrchestrationEngineService
+    | ProviderRuntimeIngestionService
+    | ProjectionSnapshotQuery
+    | TurnCostRepository,
     unknown
   > | null = null;
   let scope: Scope.Closeable | null = null;
@@ -246,6 +250,7 @@ describe("ProviderRuntimeIngestion", () => {
     const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
     const snapshotQuery = await runtime.runPromise(Effect.service(ProjectionSnapshotQuery));
     const ingestion = await runtime.runPromise(Effect.service(ProviderRuntimeIngestionService));
+    const turnCosts = await runtime.runPromise(Effect.service(TurnCostRepository));
     scope = await Effect.runPromise(Scope.make("sequential"));
     await Effect.runPromise(ingestion.start().pipe(Scope.provide(scope)));
     const drain = () => Effect.runPromise(ingestion.drain);
@@ -312,6 +317,7 @@ describe("ProviderRuntimeIngestion", () => {
     return {
       engine,
       readModel: () => Effect.runPromise(snapshotQuery.getSnapshot()),
+      turnCosts,
       emit: provider.emit,
       setProviderSession: provider.setSession,
       drain,
@@ -2768,6 +2774,128 @@ describe("ProviderRuntimeIngestion", () => {
       lastOutputTokens: 6,
       compactsAutomatically: true,
     });
+  });
+
+  it("records Codex token usage updates as per-turn costs", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "thread.token-usage.updated",
+      eventId: asEventId("evt-thread-token-usage-cost"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: "turn-1",
+      payload: {
+        usage: {
+          usedTokens: 2_000,
+          lastUsedTokens: 2_000,
+          lastInputTokens: 1_000,
+          lastCachedInputTokens: 0,
+          lastOutputTokens: 1_000,
+          lastReasoningOutputTokens: 0,
+        },
+      },
+    });
+
+    await harness.drain();
+
+    const totals = await Effect.runPromise(
+      harness.turnCosts.aggregateByThreadId(asThreadId("thread-1")),
+    );
+    expect(totals.totalTurns).toBe(1);
+    expect(totals.totalInputTokens).toBe(1_000);
+    expect(totals.totalOutputTokens).toBe(1_000);
+    expect(totals.totalCostUsd).toBe(0.05);
+  });
+
+  it("does not reuse stale token usage for a different completed turn", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "thread.token-usage.updated",
+      eventId: asEventId("evt-thread-token-usage-turn-1"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: "turn-1",
+      payload: {
+        usage: {
+          usedTokens: 2_000,
+          lastUsedTokens: 2_000,
+          lastInputTokens: 1_000,
+          lastCachedInputTokens: 0,
+          lastOutputTokens: 1_000,
+          lastReasoningOutputTokens: 0,
+        },
+      },
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-turn-2-completed"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      threadId: asThreadId("thread-1"),
+      turnId: "turn-2",
+      status: "completed",
+    });
+
+    await harness.drain();
+
+    const rows = await Effect.runPromise(
+      harness.turnCosts.listByThreadId(asThreadId("thread-1"), { limit: 10 }),
+    );
+    const completedTurnCost = rows.find((row) => row.turnId === "turn-2");
+    expect(completedTurnCost?.inputTokens).toBe(0);
+    expect(completedTurnCost?.outputTokens).toBe(0);
+    expect(completedTurnCost?.costUsd).toBe(0);
+  });
+
+  it("records ACP camelCase usage carried by turn completion events", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.setProviderSession({
+      provider: ProviderDriverKind.make("cursor"),
+      status: "ready",
+      runtimeMode: "approval-required",
+      threadId: ThreadId.make("thread-1"),
+      model: "composer-2",
+      createdAt: now,
+      updatedAt: now,
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-cursor-turn-completed-usage"),
+      provider: ProviderDriverKind.make("cursor"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: "turn-cursor",
+      payload: {
+        state: "completed",
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 1_000,
+          cachedReadTokens: 100,
+          thoughtTokens: 20,
+          totalTokens: 2_020,
+        },
+      },
+    });
+
+    await harness.drain();
+
+    const rows = await Effect.runPromise(
+      harness.turnCosts.listByThreadId(asThreadId("thread-1"), { limit: 10 }),
+    );
+    const completedTurnCost = rows.find((row) => row.turnId === "turn-cursor");
+    expect(completedTurnCost?.inputTokens).toBe(1_000);
+    expect(completedTurnCost?.outputTokens).toBe(1_000);
+    expect(completedTurnCost?.cachedInputTokens).toBe(100);
+    expect(completedTurnCost?.reasoningTokens).toBe(20);
+    expect(completedTurnCost?.costUsd).toBeGreaterThan(0);
   });
 
   it("projects Claude usage snapshots with context window into normalized thread activities", async () => {

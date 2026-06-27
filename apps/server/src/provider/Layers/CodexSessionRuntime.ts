@@ -549,6 +549,7 @@ function readRouteFields(notification: CodexServerNotification): {
       };
     case "turn/diff/updated":
     case "turn/plan/updated":
+    case "thread/tokenUsage/updated":
       return {
         turnId: TurnId.make(notification.params.turnId),
         itemId: undefined,

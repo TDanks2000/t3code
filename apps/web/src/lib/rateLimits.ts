@@ -1,4 +1,8 @@
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
+import type {
+  AccountLimitSnapshot,
+  OrchestrationThreadActivity,
+  ServerProviderUsageLimits,
+} from "@t3tools/contracts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -14,6 +18,17 @@ function asString(value: unknown): string | null {
 
 function asBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function looksLikeCodexRateLimitSnapshot(value: Record<string, unknown>): boolean {
+  return (
+    "primary" in value ||
+    "secondary" in value ||
+    "planType" in value ||
+    "credits" in value ||
+    "individualLimit" in value ||
+    "rateLimitReachedType" in value
+  );
 }
 
 export interface RateLimitWindowInfo {
@@ -35,11 +50,30 @@ export interface ProviderRateLimitSnapshot {
 export function deriveLatestRateLimitSnapshot(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
 ): ProviderRateLimitSnapshot | null {
-  return mergeRateLimitSnapshots(activities);
+  return mergeRateLimitSnapshots(
+    activities.flatMap((activity) =>
+      activity.kind === "account.rate-limits.updated"
+        ? [{ payload: activity.payload, createdAt: activity.createdAt }]
+        : [],
+    ),
+  );
+}
+
+export function deriveRateLimitSnapshotFromAccountLimit(
+  snapshot: AccountLimitSnapshot,
+): ProviderRateLimitSnapshot | null {
+  return mergeRateLimitSnapshots([{ payload: snapshot.rateLimits, createdAt: snapshot.createdAt }]);
+}
+
+export function deriveRateLimitSnapshotFromProviderUsageLimits(
+  limits: ServerProviderUsageLimits | undefined,
+): ProviderRateLimitSnapshot | null {
+  if (!limits?.rateLimits) return null;
+  return mergeRateLimitSnapshots([{ payload: limits.rateLimits, createdAt: limits.createdAt }]);
 }
 
 function mergeRateLimitSnapshots(
-  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  entries: ReadonlyArray<{ readonly payload: unknown; readonly createdAt: string }>,
 ): ProviderRateLimitSnapshot | null {
   let primary: RateLimitWindowInfo | null = null;
   let secondary: RateLimitWindowInfo | null = null;
@@ -49,16 +83,16 @@ function mergeRateLimitSnapshots(
   let spendLimitRemainingPercent: number | null = null;
   let updatedAt = "";
 
-  for (const activity of activities) {
-    if (activity.kind !== "account.rate-limits.updated") continue;
-
-    const payload = asRecord(activity.payload);
+  for (const entry of entries) {
+    const payload = asRecord(entry.payload);
     if (!payload) continue;
 
-    // Codex: all windows in one event
+    // Codex: all windows in one event or direct account/rateLimits/read response.
     const codexOuter = asRecord(payload.rateLimits);
     if (codexOuter) {
-      const rateLimits = asRecord(codexOuter.rateLimits);
+      const rateLimits =
+        asRecord(codexOuter.rateLimits) ??
+        (looksLikeCodexRateLimitSnapshot(codexOuter) ? codexOuter : null);
       if (rateLimits) {
         if (!primary) {
           const raw = asRecord(rateLimits.primary);
@@ -90,7 +124,7 @@ function mergeRateLimitSnapshots(
         if (individualLimit && spendLimitRemainingPercent === null) {
           spendLimitRemainingPercent = asFiniteNumber(individualLimit.remainingPercent);
         }
-        updatedAt = activity.createdAt;
+        updatedAt = entry.createdAt;
         continue;
       }
     }
@@ -119,7 +153,7 @@ function mergeRateLimitSnapshots(
       }
     }
 
-    updatedAt = activity.createdAt;
+    updatedAt = entry.createdAt;
   }
 
   if (!primary && !secondary && !planType && creditsBalance === null) return null;

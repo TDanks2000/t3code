@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   EnvironmentId,
   ProjectId,
-  ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -15,15 +14,16 @@ const environmentId = EnvironmentId.make("env-local");
 const projectId = ProjectId.make("project-1");
 const otherProjectId = ProjectId.make("project-2");
 const providerInstanceId = ProviderInstanceId.make("codex");
-const provider = ProviderDriverKind.make("codex");
 
 const baseProject: Project = {
   id: projectId,
   environmentId,
-  name: "t3code",
-  cwd: "/repo/t3code",
+  title: "t3code",
+  workspaceRoot: "/repo/t3code",
   defaultModelSelection: null,
   scripts: [],
+  createdAt: "2026-06-18T10:00:00.000Z",
+  updatedAt: "2026-06-18T10:00:00.000Z",
 };
 
 const baseThread = (id: string, overrides: Partial<SidebarThreadSummary> = {}) =>
@@ -32,7 +32,9 @@ const baseThread = (id: string, overrides: Partial<SidebarThreadSummary> = {}) =
     environmentId,
     projectId,
     title: id,
-    interactionMode: "default",
+    modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
+    runtimeMode: "full-access" as const,
+    interactionMode: "default" as const,
     session: null,
     createdAt: "2026-06-18T10:00:00.000Z",
     archivedAt: null,
@@ -48,20 +50,8 @@ const baseThread = (id: string, overrides: Partial<SidebarThreadSummary> = {}) =
   }) satisfies SidebarThreadSummary;
 
 const threadShell = (thread: SidebarThreadSummary): ThreadShell => ({
-  id: thread.id,
-  environmentId: thread.environmentId,
-  codexThreadId: null,
-  projectId: thread.projectId,
-  title: thread.title,
+  ...thread,
   modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
-  runtimeMode: "full-access",
-  interactionMode: "default",
-  error: null,
-  createdAt: thread.createdAt,
-  archivedAt: thread.archivedAt,
-  updatedAt: thread.updatedAt,
-  branch: thread.branch,
-  worktreePath: thread.worktreePath,
 });
 
 function appState(input: {
@@ -73,28 +63,17 @@ function appState(input: {
   const environmentState: EnvironmentState = {
     projectIds: projects.map((project) => project.id),
     projectById: Object.fromEntries(projects.map((project) => [project.id, project])),
-    threadIds: threads.map((thread) => thread.id),
     threadIdsByProjectId: threads.reduce<Record<ProjectId, ThreadId[]>>((acc, thread) => {
       acc[thread.projectId] = [...(acc[thread.projectId] ?? []), thread.id];
       return acc;
     }, {}),
     threadShellById: Object.fromEntries(threads.map((thread) => [thread.id, threadShell(thread)])),
-    threadSessionById: {},
-    threadTurnStateById: {},
-    messageIdsByThreadId: {},
-    messageByThreadId: {},
-    activityIdsByThreadId: {},
-    activityByThreadId: {},
-    proposedPlanIdsByThreadId: {},
-    proposedPlanByThreadId: {},
-    turnDiffIdsByThreadId: {},
-    turnDiffSummaryByThreadId: {},
     sidebarThreadSummaryById: Object.fromEntries(threads.map((thread) => [thread.id, thread])),
     bootstrapComplete: true,
   };
   return {
     activeEnvironmentId: environmentId,
-    environmentStateById: {
+    environments: {
       [environmentId]: environmentState,
     },
   };
@@ -105,19 +84,20 @@ describe("selectIdeAgentContext", () => {
     const otherProject: Project = {
       ...baseProject,
       id: otherProjectId,
-      name: "other",
-      cwd: "/repo/other",
+      title: "other",
+      workspaceRoot: "/repo/other",
     };
     const selected = baseThread("selected", {
       title: "Selected workspace thread",
       projectId: otherProjectId,
       session: {
-        provider,
+        threadId: ThreadId.make("selected"),
         providerInstanceId,
+        providerName: "codex",
         status: "running",
-        orchestrationStatus: "running",
-        activeTurnId: undefined,
-        createdAt: "2026-06-18T10:00:00.000Z",
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: null,
         updatedAt: "2026-06-18T10:00:00.000Z",
       },
     });

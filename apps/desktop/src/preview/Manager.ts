@@ -17,9 +17,11 @@ import type {
   PreviewAutomationActionEvent,
   PreviewAutomationConsoleEntry,
   PreviewAutomationEvaluateInput,
+  PreviewAutomationHoverInput,
   PreviewAutomationPressInput,
   PreviewAutomationNetworkEntry,
   PreviewAutomationScrollInput,
+  PreviewAutomationSelectInput,
   PreviewAutomationSnapshot,
   PreviewAutomationStatus,
   PreviewAutomationTypeInput,
@@ -1877,7 +1879,12 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const resolveClickPoint = Effect.fn("PreviewManager.resolveClickPoint")(function* (
     tabId: string,
     send: SendCommand,
-    input: PreviewAutomationClickInput,
+    input: {
+      readonly selector?: string | undefined;
+      readonly locator?: string | undefined;
+      readonly x?: number | undefined;
+      readonly y?: number | undefined;
+    },
   ) {
     if (!("selector" in input) && !("locator" in input)) {
       return { x: input.x!, y: input.y! };
@@ -1986,19 +1993,36 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       createdAt: clickCreatedAt,
     });
     yield* Effect.sleep(AGENT_CURSOR_CLICK_LEAD_MS);
-    yield* expectAgentInput(tabId, { kind: "pointer", ...point, button: 0 });
+    const button = input.button ?? "left";
+    const clickCount = input.clickCount ?? 1;
+    const buttonCode = button === "left" ? 0 : button === "right" ? 2 : 1;
+    yield* expectAgentInput(tabId, { kind: "pointer", ...point, button: buttonCode });
     yield* send("Input.dispatchMouseEvent", {
       type: "mousePressed",
       ...point,
-      button: "left",
-      clickCount: 1,
+      button,
+      clickCount,
     });
     yield* send("Input.dispatchMouseEvent", {
       type: "mouseReleased",
       ...point,
-      button: "left",
-      clickCount: 1,
+      button,
+      clickCount,
     });
+    if (clickCount === 2) {
+      yield* send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        ...point,
+        button,
+        clickCount,
+      });
+      yield* send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        ...point,
+        button,
+        clickCount,
+      });
+    }
   });
 
   const automationClick = Effect.fn("PreviewManager.automationClick")(function* (
@@ -2008,6 +2032,137 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     const wc = yield* requireWebContents(tabId);
     yield* withControlSession(tabId, wc, "click", (send) =>
       performAutomationClick(tabId, input, send),
+    );
+  });
+
+  const performAutomationHover = Effect.fn("PreviewManager.performAutomationHover")(function* (
+    tabId: string,
+    input: PreviewAutomationHoverInput,
+    send: SendCommand,
+  ) {
+    yield* Effect.all(
+      [send("Runtime.enable"), send("Input.setIgnoreInputEvents", { ignore: false })],
+      { concurrency: 2, discard: true },
+    );
+    const point = yield* resolveClickPoint(tabId, send, input);
+    const viewport = yield* evaluateWithDebugger<{ width: number; height: number }>(
+      tabId,
+      send,
+      "({ width: window.innerWidth, height: window.innerHeight })",
+      true,
+    );
+    if (point.x < 0 || point.y < 0 || point.x > viewport.width || point.y > viewport.height) {
+      return yield* new PreviewAutomationCoordinatesOutsideViewportError({
+        tabId,
+        x: point.x,
+        y: point.y,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+      });
+    }
+    const moveSequence = yield* nextCounter(pointerSequenceRef);
+    const moveCreatedAt = yield* currentIso;
+    yield* emitPointerEvent({ tabId, phase: "move", ...point, sequence: moveSequence, createdAt: moveCreatedAt });
+    yield* Effect.sleep(AGENT_CURSOR_MOVE_MS);
+    yield* send("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      ...point,
+      button: "none",
+    });
+    const dwellMs = input.dwellMs ?? 300;
+    if (dwellMs > 0) yield* Effect.sleep(dwellMs);
+  });
+
+  const automationHover = Effect.fn("PreviewManager.automationHover")(function* (
+    tabId: string,
+    input: PreviewAutomationHoverInput,
+  ) {
+    const wc = yield* requireWebContents(tabId);
+    yield* withControlSession(tabId, wc, "hover", (send) =>
+      performAutomationHover(tabId, input, send),
+    );
+  });
+
+  const performAutomationSelect = Effect.fn("PreviewManager.performAutomationSelect")(function* (
+    tabId: string,
+    input: PreviewAutomationSelectInput,
+    send: SendCommand,
+  ) {
+    yield* send("Runtime.enable");
+    const locator = automationLocator(input);
+    if (locator) yield* ensurePlaywrightInjected(tabId, send);
+    const locatorJson = locator
+      ? yield* encodeJson({ operation: "automationSelect.encodeLocator", tabId }, locator)
+      : null;
+
+    let selectionExpr: string;
+    if (input.value !== undefined) {
+      const valueJson = yield* encodeJson(
+        { operation: "automationSelect.encodeValue", tabId },
+        input.value,
+      );
+      selectionExpr = `element.value = ${valueJson};`;
+    } else if (input.label !== undefined) {
+      const labelJson = yield* encodeJson(
+        { operation: "automationSelect.encodeLabel", tabId },
+        input.label.trim(),
+      );
+      selectionExpr = `
+        const opt = Array.from(element.options).find(o => o.text.trim().includes(${labelJson}));
+        if (!opt) return { notFound: true };
+        element.value = opt.value;`;
+    } else {
+      selectionExpr = `element.selectedIndex = ${input.index!};`;
+    }
+
+    const result = yield* evaluateWithDebugger<
+      { ok: true } | { invalidSelector: true; message: string } | { notFound: true }
+    >(
+      tabId,
+      send,
+      `(() => {
+        try {
+          const element = ${
+            locatorJson
+              ? `(() => { const injected = globalThis.__t3PlaywrightInjected; return injected.querySelector(injected.parseSelector(${locatorJson}), document, true); })()`
+              : "document.activeElement"
+          };
+          if (!element) return { notFound: true };
+          ${selectionExpr}
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          return { ok: true };
+        } catch (error) {
+          return { invalidSelector: true, message: String(error) };
+        }
+      })()`,
+      true,
+    );
+    if ("invalidSelector" in result) {
+      return yield* new PreviewAutomationInvalidSelectorError({
+        operation: "select",
+        tabId,
+        ...automationSelectorDiagnostics(input),
+        reasonLength: result.message.length,
+        cause: result,
+      });
+    }
+    if ("notFound" in result) {
+      return yield* new PreviewAutomationTargetNotFoundError({
+        operation: "select",
+        tabId,
+        ...automationSelectorDiagnostics(input),
+      });
+    }
+  });
+
+  const automationSelect = Effect.fn("PreviewManager.automationSelect")(function* (
+    tabId: string,
+    input: PreviewAutomationSelectInput,
+  ) {
+    const wc = yield* requireWebContents(tabId);
+    yield* withControlSession(tabId, wc, "select", (send) =>
+      performAutomationSelect(tabId, input, send),
     );
   });
 
@@ -2356,8 +2511,10 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   return {
     automationClick,
     automationEvaluate,
+    automationHover,
     automationPress,
     automationScroll,
+    automationSelect,
     automationSnapshot,
     automationStatus,
     automationType,
@@ -2721,6 +2878,14 @@ export class PreviewManager extends Context.Service<
       tabId: string,
       input: PreviewAutomationWaitForInput,
     ) => Effect.Effect<void, PreviewManagerError>;
+    readonly automationHover: (
+      tabId: string,
+      input: PreviewAutomationHoverInput,
+    ) => Effect.Effect<void, PreviewManagerError>;
+    readonly automationSelect: (
+      tabId: string,
+      input: PreviewAutomationSelectInput,
+    ) => Effect.Effect<void, PreviewManagerError>;
     readonly subscribeStateChanges: (listener: Listener) => Effect.Effect<void, never, Scope.Scope>;
     readonly subscribePointerEvents: (
       listener: PointerEventListener,
@@ -2802,6 +2967,8 @@ export const make = Effect.gen(function* PreviewManagerMake() {
     automationScroll: operations.automationScroll,
     automationEvaluate: operations.automationEvaluate,
     automationWaitFor: operations.automationWaitFor,
+    automationHover: operations.automationHover,
+    automationSelect: operations.automationSelect,
     subscribeStateChanges: operations.subscribeStateChanges,
     subscribePointerEvents: operations.subscribePointerEvents,
     subscribeRecordingFrames: operations.subscribeRecordingFrames,

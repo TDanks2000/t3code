@@ -1068,6 +1068,7 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       if (firstEvent.value.type !== "thread.token-usage.updated") {
         return;
       }
+      NodeAssert.equal(firstEvent.value.turnId, "turn-1");
 
       NodeAssert.deepEqual(firstEvent.value.payload.usage, {
         usedTokens: 126,

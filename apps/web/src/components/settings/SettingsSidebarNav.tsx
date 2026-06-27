@@ -36,15 +36,23 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   label: string;
   to: SettingsSectionPath;
   icon: ComponentType<{ className?: string }>;
+  group: "Workspace" | "Configuration" | "Operations";
 }> = [
-  { label: "General", to: "/settings/general", icon: Settings2Icon },
-  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
-  { label: "Providers", to: "/settings/providers", icon: BotIcon },
-  { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
-  { label: "Connections", to: "/settings/connections", icon: Link2Icon },
-  { label: "Usage", to: "/settings/usage", icon: DollarSignIcon },
-  { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
+  { label: "General", to: "/settings/general", icon: Settings2Icon, group: "Workspace" },
+  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon, group: "Workspace" },
+  { label: "Providers", to: "/settings/providers", icon: BotIcon, group: "Configuration" },
+  {
+    label: "Source Control",
+    to: "/settings/source-control",
+    icon: GitBranchIcon,
+    group: "Configuration",
+  },
+  { label: "Connections", to: "/settings/connections", icon: Link2Icon, group: "Configuration" },
+  { label: "Usage", to: "/settings/usage", icon: DollarSignIcon, group: "Operations" },
+  { label: "Archive", to: "/settings/archived", icon: ArchiveIcon, group: "Operations" },
 ];
+
+const SETTINGS_NAV_GROUPS = ["Workspace", "Configuration", "Operations"] as const;
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
@@ -74,35 +82,53 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     <>
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup className="px-2 py-3">
-          <SidebarMenu>
-            {SETTINGS_NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.to;
-              return (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    size="sm"
-                    isActive={isActive}
-                    className={
-                      isActive
-                        ? "gap-2.5 px-2.5 py-2 text-left text-[13px] font-medium text-foreground"
-                        : "gap-2.5 px-2.5 py-2 text-left text-[13px] text-muted-foreground/70 hover:text-foreground/80"
-                    }
-                    onClick={() => handleSectionClick(item.to)}
-                  >
-                    <Icon
-                      className={
-                        isActive
-                          ? "size-4 shrink-0 text-foreground"
-                          : "size-4 shrink-0 text-muted-foreground/60"
-                      }
-                    />
-                    <span className="truncate">{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
+          <div className="mb-3 px-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/50">
+              Control room
+            </div>
+            <div className="mt-1 text-xs leading-4 text-muted-foreground/70">
+              Tune the local agent workspace.
+            </div>
+          </div>
+
+          {SETTINGS_NAV_GROUPS.map((group) => (
+            <div key={group} className="mt-4 first:mt-0">
+              <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/45">
+                {group}
+              </div>
+              <SidebarMenu>
+                {SETTINGS_NAV_ITEMS.filter((item) => item.group === group).map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.to;
+                  return (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton
+                        size="sm"
+                        isActive={isActive}
+                        className={
+                          isActive
+                            ? "relative gap-2.5 overflow-hidden px-2.5 py-2 text-left text-[13px] font-semibold text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                            : "gap-2.5 px-2.5 py-2 text-left text-[13px] text-muted-foreground/70 hover:bg-accent/60 hover:text-foreground"
+                        }
+                        onClick={() => handleSectionClick(item.to)}
+                      >
+                        <span
+                          className={
+                            isActive
+                              ? "flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"
+                              : "flex size-6 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground/65"
+                          }
+                        >
+                          <Icon className="size-3.5" />
+                        </span>
+                        <span className="truncate">{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </div>
+          ))}
         </SidebarGroup>
       </SidebarContent>
 

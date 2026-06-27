@@ -792,6 +792,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [selectedProviderEntry],
   );
 
+  const promptHasActiveSkills = useMemo(
+    () => /(?:^|\s)\$[a-zA-Z][a-zA-Z0-9:_-]*/.test(prompt),
+    [prompt],
+  );
+
+  const skillProviderContext = useMemo(() => {
+    if (!selectedProviderEntry) return undefined;
+    const duplicateCount = providerInstanceEntries.filter(
+      (e) => e.driverKind === selectedProviderEntry.driverKind,
+    ).length;
+    return {
+      driverKind: selectedProviderEntry.driverKind,
+      displayName: selectedProviderEntry.displayName,
+      accentColor: selectedProviderEntry.accentColor,
+      showBadge: Boolean(selectedProviderEntry.accentColor) || duplicateCount > 1,
+    };
+  }, [selectedProviderEntry, providerInstanceEntries]);
+
   const composerPromptInjectionState = useMemo(
     () => getComposerPromptInjectionState(prompt),
     [prompt],
@@ -2106,7 +2124,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ref={composerSurfaceRef}
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
           className={cn(
-            "rounded-[20px] border bg-card transition-colors duration-200 has-focus-visible:border-ring/45",
+            "rounded-[20px] border bg-card shadow-sm transition-[colors,box-shadow] duration-200 has-focus-visible:border-ring/45 has-focus-visible:shadow-md",
             isDragOverComposer ? "border-primary/70 bg-accent/30" : "border-border",
             environmentUnavailable ? "opacity-75" : null,
             composerProviderState.composerSurfaceClassName,
@@ -2297,6 +2315,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   emptyStateText={composerMenuEmptyState}
                   activeItemId={activeComposerMenuItem?.id ?? null}
+                  skillProviderContext={skillProviderContext}
                   onHighlightedItemChange={onComposerMenuItemHighlighted}
                   onSelect={onSelectComposerItem}
                 />
@@ -2526,6 +2545,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   modelOptionsByInstance={modelOptionsByInstance}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
+                  forceShowBadge={promptHasActiveSkills}
                   {...(composerProviderState.modelPickerIconClassName
                     ? {
                         activeProviderIconClassName: composerProviderState.modelPickerIconClassName,

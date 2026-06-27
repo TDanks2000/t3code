@@ -307,6 +307,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           const status = yield* checkCodexProviderStatus(defaultCodexSettings, () =>
             Effect.succeed(
               makeCodexProbeSnapshot({
+                rateLimits: {
+                  rateLimits: {
+                    primary: { usedPercent: 40, resetsAt: 1_800_000_000_000 },
+                    secondary: null,
+                    planType: "pro",
+                  },
+                },
+                tokenUsage: {
+                  dailyUsageBuckets: [{ startDate: "2026-06-26", tokens: 1234 }],
+                  summary: { lifetimeTokens: 1234 },
+                },
                 skills: [
                   {
                     name: "github:gh-fix-ci",
@@ -343,6 +354,20 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               shortDescription: "Debug failing GitHub Actions checks",
             },
           ]);
+          assert.deepStrictEqual(status.usageLimits, {
+            createdAt: status.checkedAt,
+            rateLimits: {
+              rateLimits: {
+                primary: { usedPercent: 40, resetsAt: 1_800_000_000_000 },
+                secondary: null,
+                planType: "pro",
+              },
+            },
+            tokenUsage: {
+              dailyUsageBuckets: [{ startDate: "2026-06-26", tokens: 1234 }],
+              summary: { lifetimeTokens: 1234 },
+            },
+          });
         }),
       );
 

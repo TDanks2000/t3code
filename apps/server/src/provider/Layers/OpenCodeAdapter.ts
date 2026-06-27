@@ -1014,8 +1014,12 @@ export function makeOpenCodeAdapter(
               usedTokens: input + output,
               inputTokens: input,
               outputTokens: output,
+              lastInputTokens: input,
+              lastOutputTokens: output,
               ...(reasoning > 0 ? { reasoningOutputTokens: reasoning } : {}),
               ...(cache.read > 0 ? { cachedInputTokens: cache.read } : {}),
+              ...(cache.read > 0 ? { lastCachedInputTokens: cache.read } : {}),
+              ...(reasoning > 0 ? { lastReasoningOutputTokens: reasoning } : {}),
             };
             yield* emit({
               ...(yield* buildEventBase({

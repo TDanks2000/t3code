@@ -10,6 +10,7 @@ import {
   healthzRouteLayer,
   otlpTracesProxyRouteLayer,
   assetRouteLayer,
+  projectFaviconRouteLayer,
   serverEnvironmentHttpApiLayer,
   staticAndDevRouteLayer,
   workspaceFileRouteLayer,

@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { TerminalIcon } from "lucide-react";
-import { workspaceTerminalThreadRef } from "@t3tools/client-runtime";
+import { workspaceTerminalThreadRef } from "@t3tools/client-runtime/workspaceTerminal";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
 import { IdeTerminalPanel } from "../components/ide/IdeTerminalPanel";
-import { usePrimaryEnvironmentId } from "../environments/primary";
+import { usePrimaryEnvironmentId } from "../state/environments";
 import { useTerminalUiStateStore } from "../terminalUiStateStore";
 
 export interface TerminalRouteSearch {

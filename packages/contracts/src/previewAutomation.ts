@@ -31,6 +31,11 @@ export const PreviewAutomationOperation = Schema.Literals([
   "waitFor",
   "recordingStart",
   "recordingStop",
+  "hover",
+  "select",
+  "tabList",
+  "tabSwitch",
+  "tabClose",
 ]);
 export type PreviewAutomationOperation = typeof PreviewAutomationOperation.Type;
 
@@ -163,6 +168,16 @@ export const PreviewAutomationClickInput = Schema.Struct({
       description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x.",
     }),
   ),
+  button: Schema.optional(
+    Schema.Literals(["left", "right", "middle"]).annotate({
+      description: "Mouse button to press. Defaults to 'left'.",
+    }),
+  ),
+  clickCount: Schema.optional(
+    Schema.Literals([1, 2]).annotate({
+      description: "Number of successive clicks. Use 2 for double-click. Defaults to 1.",
+    }),
+  ),
   timeoutMs: OptionalTimeoutMs,
 })
   .check(
@@ -178,9 +193,108 @@ export const PreviewAutomationClickInput = Schema.Struct({
   )
   .annotate({
     description:
-      "Clicks one target. Provide exactly one of locator, selector, or the x/y coordinate pair.",
+      "Clicks one target. Provide exactly one of locator, selector, or the x/y coordinate pair. Optionally specify button ('left'/'right'/'middle') and clickCount (1 or 2 for double-click).",
   });
 export type PreviewAutomationClickInput = typeof PreviewAutomationClickInput.Type;
+
+export const PreviewAutomationHoverInput = Schema.Struct({
+  selector: Schema.optional(LegacySelector).annotate({
+    description: "Legacy CSS selector for the hover target. Prefer locator.",
+  }),
+  locator: Schema.optional(Locator).annotate({
+    description: "Playwright selector for the hover target.",
+  }),
+  x: Schema.optional(
+    Schema.Finite.annotate({ description: "Viewport-relative X coordinate in CSS pixels. Must be paired with y." }),
+  ),
+  y: Schema.optional(
+    Schema.Finite.annotate({ description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x." }),
+  ),
+  dwellMs: Schema.optional(
+    Schema.Int
+      .check(Schema.isGreaterThanOrEqualTo(0))
+      .check(Schema.isLessThanOrEqualTo(2_000))
+      .annotate({ description: "Milliseconds to hold the hover. Defaults to 300. Increase for slow tooltip animations." }),
+  ),
+})
+  .check(
+    Schema.makeFilter((input) => {
+      const selectorModes =
+        Number(input.selector !== undefined) + Number(input.locator !== undefined);
+      const hasX = input.x !== undefined;
+      const hasY = input.y !== undefined;
+      if (hasX !== hasY) return "Coordinates require both x and y.";
+      const coordinateModes = hasX && hasY ? 1 : 0;
+      return selectorModes + coordinateModes === 1 || "Provide exactly one hover target.";
+    }),
+  )
+  .annotate({
+    description:
+      "Moves the cursor to a target and holds to trigger CSS :hover state and reveal tooltips or hover-menus.",
+  });
+export type PreviewAutomationHoverInput = typeof PreviewAutomationHoverInput.Type;
+
+export const PreviewAutomationSelectInput = Schema.Struct({
+  selector: Schema.optional(LegacySelector).annotate({
+    description: "Legacy CSS selector for the <select> element. Prefer locator.",
+  }),
+  locator: Schema.optional(Locator).annotate({
+    description: "Playwright selector for the <select> element.",
+  }),
+  value: Schema.optional(
+    Schema.String.annotate({ description: "Option value attribute to select." }),
+  ),
+  label: Schema.optional(
+    Schema.String.annotate({
+      description: "Visible option text to select. Case-sensitive substring match after trimming whitespace.",
+    }),
+  ),
+  index: Schema.optional(
+    Schema.Int
+      .check(Schema.isGreaterThanOrEqualTo(0))
+      .annotate({ description: "Zero-based option index." }),
+  ),
+  timeoutMs: OptionalTimeoutMs,
+})
+  .check(
+    Schema.makeFilter((input) => {
+      if (input.selector !== undefined && input.locator !== undefined) {
+        return "Provide at most one of selector or locator.";
+      }
+      const valueModes =
+        Number(input.value !== undefined) +
+        Number(input.label !== undefined) +
+        Number(input.index !== undefined);
+      return valueModes === 1 || "Provide exactly one of value, label, or index.";
+    }),
+  )
+  .annotate({ description: "Selects an option from a native <select> element." });
+export type PreviewAutomationSelectInput = typeof PreviewAutomationSelectInput.Type;
+
+export const PreviewAutomationTabEntry = Schema.Struct({
+  tabId: PreviewTabId,
+  url: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+  loading: Schema.Boolean,
+  active: Schema.Boolean,
+});
+export type PreviewAutomationTabEntry = typeof PreviewAutomationTabEntry.Type;
+
+export const PreviewAutomationTabList = Schema.Struct({
+  tabs: Schema.Array(PreviewAutomationTabEntry),
+  activeTabId: Schema.NullOr(PreviewTabId),
+});
+export type PreviewAutomationTabList = typeof PreviewAutomationTabList.Type;
+
+export const PreviewAutomationTabSwitchInput = Schema.Struct({
+  tabId: PreviewTabId.annotate({ description: "Tab to make active." }),
+}).annotate({ description: "Switches the active browser tab." });
+export type PreviewAutomationTabSwitchInput = typeof PreviewAutomationTabSwitchInput.Type;
+
+export const PreviewAutomationTabCloseInput = Schema.Struct({
+  tabId: PreviewTabId.annotate({ description: "Tab to close." }),
+}).annotate({ description: "Closes a browser tab." });
+export type PreviewAutomationTabCloseInput = typeof PreviewAutomationTabCloseInput.Type;
 
 export const PreviewAutomationTypeInput = Schema.Struct({
   text: Schema.String.annotate({ description: "Literal text to insert." }),

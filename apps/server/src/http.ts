@@ -26,6 +26,12 @@ import { OtlpTracer } from "effect/unstable/observability";
 
 import * as ServerConfig from "./config.ts";
 import {
+  ATTACHMENTS_ROUTE_PREFIX,
+  normalizeAttachmentRelativePath,
+  resolveAttachmentRelativePath,
+} from "./attachmentPaths.ts";
+import { resolveAttachmentPathById } from "./attachmentStore.ts";
+import {
   ASSET_ROUTE_PREFIX,
   FALLBACK_PROJECT_FAVICON_SVG,
   resolveAsset,
@@ -175,6 +181,64 @@ export const otlpTracesProxyRouteLayer = HttpRouter.add(
           HttpServerResponse.text("Trace export failed.", { status: 502 }),
         ),
       );
+  }).pipe(
+    Effect.catchTags({
+      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+      EnvironmentInternalError: HttpServerRespondable.toResponse,
+      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
+    }),
+  ),
+);
+
+export const attachmentsRouteLayer = HttpRouter.add(
+  "GET",
+  `${ATTACHMENTS_ROUTE_PREFIX}/*`,
+  Effect.gen(function* () {
+    yield* authenticateRawRouteWithScope(AuthOrchestrationReadScope);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const config = yield* ServerConfig.ServerConfig;
+    const rawRelativePath = url.value.pathname.slice(ATTACHMENTS_ROUTE_PREFIX.length);
+    const normalizedRelativePath = normalizeAttachmentRelativePath(rawRelativePath);
+    if (!normalizedRelativePath) {
+      return HttpServerResponse.text("Invalid attachment path", { status: 400 });
+    }
+
+    const isIdLookup =
+      !normalizedRelativePath.includes("/") && !normalizedRelativePath.includes(".");
+    const filePath = isIdLookup
+      ? resolveAttachmentPathById({
+          attachmentsDir: config.attachmentsDir,
+          attachmentId: normalizedRelativePath,
+        })
+      : resolveAttachmentRelativePath({
+          attachmentsDir: config.attachmentsDir,
+          relativePath: normalizedRelativePath,
+        });
+    if (!filePath) {
+      return HttpServerResponse.text(isIdLookup ? "Not Found" : "Invalid attachment path", {
+        status: isIdLookup ? 404 : 400,
+      });
+    }
+
+    const fileSystem = yield* FileSystem.FileSystem;
+    const fileInfo = yield* fileSystem.stat(filePath).pipe(Effect.orElseSucceed(() => null));
+    if (!fileInfo || fileInfo.type !== "File") {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
+    return yield* HttpServerResponse.file(filePath, {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    }).pipe(
+      Effect.orElseSucceed(() => HttpServerResponse.text("Internal Server Error", { status: 500 })),
+    );
   }).pipe(
     Effect.catchTags({
       EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,

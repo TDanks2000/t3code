@@ -1962,11 +1962,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         setOpenMobile(false);
       }
       const openProjectMemberInIde = (
-        member: Pick<SidebarProjectGroupMember, "environmentId" | "cwd">,
+        member: Pick<SidebarProjectGroupMember, "environmentId" | "workspaceRoot">,
       ) => {
         void router.navigate({
           to: "/ide",
-          search: { environmentId: member.environmentId, workspaceRoot: member.cwd },
+          search: { environmentId: member.environmentId, workspaceRoot: member.workspaceRoot },
         });
       };
 
@@ -2013,11 +2013,11 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         setOpenMobile(false);
       }
       const openProjectMemberInTerminal = (
-        member: Pick<SidebarProjectGroupMember, "environmentId" | "cwd">,
+        member: Pick<SidebarProjectGroupMember, "environmentId" | "workspaceRoot">,
       ) => {
         void router.navigate({
           to: "/terminal",
-          search: { environmentId: member.environmentId, workspaceRoot: member.cwd },
+          search: { environmentId: member.environmentId, workspaceRoot: member.workspaceRoot },
         });
       };
 

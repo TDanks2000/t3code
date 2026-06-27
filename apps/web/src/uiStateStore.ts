@@ -138,6 +138,10 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
       parsed.defaultAdvertisedEndpointKey.length > 0
         ? parsed.defaultAdvertisedEndpointKey
         : null,
+    ideSelectedFilePath:
+      parsed.ideSelectedFilePath && typeof parsed.ideSelectedFilePath === "object"
+        ? sanitizeIdeSelectedFilePath(parsed.ideSelectedFilePath)
+        : {},
   };
 }
 

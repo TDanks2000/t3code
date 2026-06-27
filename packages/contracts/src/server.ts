@@ -58,6 +58,13 @@ export const ServerProviderAuth = Schema.Struct({
 });
 export type ServerProviderAuth = typeof ServerProviderAuth.Type;
 
+export const ServerProviderUsageLimits = Schema.Struct({
+  createdAt: IsoDateTime,
+  rateLimits: Schema.optional(Schema.Unknown),
+  tokenUsage: Schema.optional(Schema.Unknown),
+});
+export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;
+
 export const ServerProviderModel = Schema.Struct({
   slug: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
@@ -187,6 +194,7 @@ export const ServerProvider = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  usageLimits: Schema.optionalKey(ServerProviderUsageLimits),
   versionAdvisory: Schema.optionalKey(ServerProviderVersionAdvisory),
   updateState: Schema.optionalKey(ServerProviderUpdateState),
 });

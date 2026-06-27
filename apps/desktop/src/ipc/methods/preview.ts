@@ -3,8 +3,10 @@ import {
   DesktopPreviewArtifactInputSchema,
   DesktopPreviewAutomationClickInputSchema,
   DesktopPreviewAutomationEvaluateInputSchema,
+  DesktopPreviewAutomationHoverInputSchema,
   DesktopPreviewAutomationPressInputSchema,
   DesktopPreviewAutomationScrollInputSchema,
+  DesktopPreviewAutomationSelectInputSchema,
   DesktopPreviewAutomationTypeInputSchema,
   DesktopPreviewAutomationWaitForInputSchema,
   DesktopPreviewConfigInputSchema,
@@ -324,6 +326,26 @@ export const automationWaitFor = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const automationHover = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_AUTOMATION_HOVER_CHANNEL,
+  payload: DesktopPreviewAutomationHoverInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.automationHover")(function* ({ tabId, input }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.automationHover(tabId, input);
+  }),
+});
+
+export const automationSelect = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.PREVIEW_AUTOMATION_SELECT_CHANNEL,
+  payload: DesktopPreviewAutomationSelectInputSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.preview.automationSelect")(function* ({ tabId, input }) {
+    const manager = yield* PreviewManager.PreviewManager;
+    yield* manager.automationSelect(tabId, input);
+  }),
+});
+
 export const saveRecording = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.PREVIEW_RECORDING_SAVE_CHANNEL,
   payload: DesktopPreviewRecordingSaveInputSchema,
@@ -364,6 +386,8 @@ export const methods = [
   automationScroll,
   automationEvaluate,
   automationWaitFor,
+  automationHover,
+  automationSelect,
   startRecording,
   stopRecording,
   saveRecording,

@@ -238,11 +238,10 @@ function AttentionBadge({ reason }: { reason: string }) {
 function SessionStatusBadge({
   session,
 }: {
-  session: { orchestrationStatus: string; status: string } | null;
+  session: { status: string } | null;
   latestTurn: { state: string } | null;
 }) {
-  const isRunning =
-    session?.orchestrationStatus === "running" || session?.orchestrationStatus === "starting";
+  const isRunning = session?.status === "running" || session?.status === "starting";
 
   if (isRunning) return <Badge variant="info">Running</Badge>;
   return null;

@@ -48,6 +48,7 @@ import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
 } from "../Services/ProjectionPipeline.ts";
+import { PREVIEW_SCREENSHOTS_SUBDIR } from "../../attachmentPaths.ts";
 import {
   attachmentRelativePath,
   parseAttachmentIdFromRelativePath,
@@ -359,8 +360,12 @@ const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(function*
   const path = yield* Effect.service(Path.Path);
 
   const attachmentsRootDir = serverConfig.attachmentsDir;
+  const screenshotsDir = path.join(attachmentsRootDir, PREVIEW_SCREENSHOTS_SUBDIR);
   const readAttachmentRootEntries = fileSystem
     .readDirectory(attachmentsRootDir, { recursive: false })
+    .pipe(Effect.orElseSucceed(() => [] as Array<string>));
+  const readScreenshotEntries = fileSystem
+    .readDirectory(screenshotsDir, { recursive: false })
     .pipe(Effect.orElseSucceed(() => [] as Array<string>));
 
   const removeDeletedThreadAttachmentEntry = Effect.fn("removeDeletedThreadAttachmentEntry")(
@@ -383,6 +388,29 @@ const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(function*
     },
   );
 
+  // Browser screenshots from preview_snapshot live in a subdirectory the prune
+  // pass never visits, so they're reaped here when their owning thread is
+  // deleted. File names share the `<threadSegment>-<uuid>` attachment-id scheme.
+  const removeDeletedThreadScreenshotEntry = Effect.fn("removeDeletedThreadScreenshotEntry")(
+    function* (threadSegment: string, entry: string) {
+      const normalizedEntry = entry.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+      if (normalizedEntry.length === 0 || normalizedEntry.includes("/")) {
+        return;
+      }
+      const attachmentId = parseAttachmentIdFromRelativePath(normalizedEntry);
+      if (!attachmentId) {
+        return;
+      }
+      const attachmentThreadSegment = parseThreadSegmentFromAttachmentId(attachmentId);
+      if (!attachmentThreadSegment || attachmentThreadSegment !== threadSegment) {
+        return;
+      }
+      yield* fileSystem.remove(path.join(screenshotsDir, normalizedEntry), {
+        force: true,
+      });
+    },
+  );
+
   const deleteThreadAttachments = Effect.fn("deleteThreadAttachments")(function* (
     threadId: string,
   ) {
@@ -398,6 +426,15 @@ const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(function*
     yield* Effect.forEach(
       entries,
       (entry) => removeDeletedThreadAttachmentEntry(threadSegment, entry),
+      {
+        concurrency: 1,
+      },
+    );
+
+    const screenshotEntries = yield* readScreenshotEntries;
+    yield* Effect.forEach(
+      screenshotEntries,
+      (entry) => removeDeletedThreadScreenshotEntry(threadSegment, entry),
       {
         concurrency: 1,
       },

@@ -2,14 +2,19 @@ import {
   PreviewAutomationClickInput,
   PreviewAutomationError,
   PreviewAutomationEvaluateInput,
+  PreviewAutomationHoverInput,
   PreviewAutomationNavigateInput,
   PreviewAutomationOpenInput,
   PreviewAutomationPressInput,
   PreviewAutomationRecordingArtifact,
   PreviewAutomationRecordingStatus,
   PreviewAutomationScrollInput,
+  PreviewAutomationSelectInput,
   PreviewAutomationSnapshot,
   PreviewAutomationStatus,
+  PreviewAutomationTabCloseInput,
+  PreviewAutomationTabList,
+  PreviewAutomationTabSwitchInput,
   PreviewAutomationTypeInput,
   PreviewAutomationWaitForInput,
 } from "@t3tools/contracts";
@@ -123,6 +128,60 @@ export const PreviewScrollTool = safeBrowserTool(
   }).annotate(Tool.Title, "Scroll preview page"),
 );
 
+export const PreviewHoverTool = safeBrowserTool(
+  Tool.make("preview_hover", {
+    description:
+      "Move the cursor to a target and hold to trigger CSS :hover state, reveal tooltips, or expose hover-triggered menus. Provide exactly one of locator, selector, or the x/y coordinate pair. Call preview_snapshot first when the target is unknown.",
+    parameters: PreviewAutomationHoverInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Hover over preview element"),
+);
+
+export const PreviewSelectTool = browserTool(
+  Tool.make("preview_select", {
+    description:
+      "Choose an option from a native <select> element. Provide a locator or selector to target the element, and exactly one of: value (option value attribute), label (visible text, trimmed substring match), or index (zero-based).",
+    parameters: PreviewAutomationSelectInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Select option in preview page"),
+);
+
+export const PreviewTabListTool = readonlyBrowserTool(
+  Tool.make("preview_tab_list", {
+    description:
+      "List all open browser tabs for the current thread. Returns each tab's id, URL, title, loading state, and whether it is the active tab.",
+    success: PreviewAutomationTabList,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "List browser tabs"),
+);
+
+export const PreviewTabSwitchTool = safeBrowserTool(
+  Tool.make("preview_tab_switch", {
+    description:
+      "Make a different browser tab the active tab. The specified tab becomes the target for subsequent preview actions. Use preview_tab_list to find available tab ids.",
+    parameters: PreviewAutomationTabSwitchInput,
+    success: PreviewAutomationStatus,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Switch active browser tab"),
+);
+
+export const PreviewTabCloseTool = browserTool(
+  Tool.make("preview_tab_close", {
+    description:
+      "Close a browser tab. Closing the active tab leaves no active tab; use preview_tab_switch or preview_open to restore one. Use preview_tab_list to find tab ids.",
+    parameters: PreviewAutomationTabCloseInput,
+    success: Schema.Null,
+    failure: PreviewAutomationError,
+    dependencies,
+  }).annotate(Tool.Title, "Close browser tab"),
+);
+
 export const PreviewEvaluateTool = browserTool(
   Tool.make("preview_evaluate", {
     description:
@@ -173,6 +232,11 @@ export const PreviewToolkit = Toolkit.make(
   PreviewTypeTool,
   PreviewPressTool,
   PreviewScrollTool,
+  PreviewHoverTool,
+  PreviewSelectTool,
+  PreviewTabListTool,
+  PreviewTabSwitchTool,
+  PreviewTabCloseTool,
   PreviewEvaluateTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,
@@ -187,6 +251,11 @@ export const PreviewStandardToolkit = Toolkit.make(
   PreviewTypeTool,
   PreviewPressTool,
   PreviewScrollTool,
+  PreviewHoverTool,
+  PreviewSelectTool,
+  PreviewTabListTool,
+  PreviewTabSwitchTool,
+  PreviewTabCloseTool,
   PreviewEvaluateTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,

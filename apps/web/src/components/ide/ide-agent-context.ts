@@ -59,8 +59,8 @@ export function selectIdeAgentContext(input: {
   return {
     environmentId: input.environmentId,
     projectId: project.id,
-    projectTitle: project.name,
-    workspaceRoot: project.cwd,
+    projectTitle: project.title,
+    workspaceRoot: project.workspaceRoot,
     threadId: summary.id,
     threadTitle: summary.title,
     modelTitle: shell.modelSelection.model,
@@ -77,7 +77,7 @@ function selectIdeProject(
 ): Project | null {
   const projects = Object.values(projectById);
   if (workspaceRoot) {
-    return projects.find((project) => project.cwd === workspaceRoot) ?? null;
+    return projects.find((project) => project.workspaceRoot === workspaceRoot) ?? null;
   }
   return projects.length === 1 ? (projects[0] ?? null) : null;
 }
@@ -99,15 +99,15 @@ function compareIdeThreads(
 function rankIdeThread(thread: SidebarThreadSummary): number {
   if (thread.hasPendingApprovals) return 100;
   if (thread.hasPendingUserInput) return 95;
-  if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
+  if (thread.session?.status === "error" || thread.latestTurn?.state === "error") {
     return 90;
   }
-  if (thread.session?.orchestrationStatus === "starting") return 80;
-  if (thread.session?.orchestrationStatus === "running" || thread.latestTurn?.state === "running") {
+  if (thread.session?.status === "starting") return 80;
+  if (thread.session?.status === "running" || thread.latestTurn?.state === "running") {
     return 75;
   }
   if (thread.latestTurn?.state === "completed") return 40;
-  if (thread.session?.orchestrationStatus === "ready") return 20;
+  if (thread.session?.status === "ready") return 20;
   return 10;
 }
 
@@ -119,11 +119,11 @@ function timestampMs(value: string): number {
 function resolveIdeAgentPhase(thread: SidebarThreadSummary): IdeAgentPhase {
   if (thread.hasPendingApprovals) return "waiting_for_approval";
   if (thread.hasPendingUserInput) return "waiting_for_input";
-  if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
+  if (thread.session?.status === "error" || thread.latestTurn?.state === "error") {
     return "failed";
   }
-  if (thread.session?.orchestrationStatus === "starting") return "starting";
-  if (thread.session?.orchestrationStatus === "running" || thread.latestTurn?.state === "running") {
+  if (thread.session?.status === "starting") return "starting";
+  if (thread.session?.status === "running" || thread.latestTurn?.state === "running") {
     return "running";
   }
   if (thread.latestTurn?.state === "completed") return "completed";
@@ -160,8 +160,8 @@ function detailForPhase(
   if (phase === "completed") {
     return "Review the completed task.";
   }
-  if ((phase === "running" || phase === "starting") && thread.session?.provider) {
-    return `${thread.session.provider} on ${shell.modelSelection.model}`;
+  if ((phase === "running" || phase === "starting") && thread.session?.providerName) {
+    return `${thread.session.providerName} on ${shell.modelSelection.model}`;
   }
   if (phase === "waiting_for_approval") {
     return "Review the pending approval in the thread.";

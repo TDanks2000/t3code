@@ -873,6 +873,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
                   payload: {
                     state: result.stopReason === "cancelled" ? "cancelled" : "completed",
                     stopReason: result.stopReason ?? null,
+                    ...(result.usage ? { usage: result.usage } : {}),
                   },
                 });
               }

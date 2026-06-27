@@ -18,6 +18,7 @@ export function useRelativeTimeTick(intervalMs = 1_000) {
 export function SettingsSection({
   title,
   icon,
+  description,
   headerAction,
   children,
   className,
@@ -25,20 +26,26 @@ export function SettingsSection({
 }: ComponentPropsWithoutRef<"section"> & {
   title: string;
   icon?: ReactNode;
+  description?: ReactNode;
   headerAction?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section {...sectionProps} className={cn("space-y-2.5", className)}>
-      <div className="flex items-center justify-between px-1">
-        <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground/50">
-          <span className="inline-block h-px w-3 bg-border" aria-hidden />
-          {icon}
-          {title}
-        </h2>
-        <div className="flex h-5 min-w-5 items-center justify-end">{headerAction}</div>
+    <section {...sectionProps} className={cn("space-y-3", className)}>
+      <div className="flex items-end justify-between gap-3 px-1">
+        <div className="min-w-0 space-y-1">
+          <h2 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground/55">
+            <span className="inline-block h-px w-5 bg-border" aria-hidden />
+            {icon}
+            {title}
+          </h2>
+          {description ? (
+            <p className="max-w-2xl text-sm leading-5 text-muted-foreground/75">{description}</p>
+          ) : null}
+        </div>
+        <div className="flex min-h-7 min-w-5 items-center justify-end">{headerAction}</div>
       </div>
-      <div className="relative overflow-visible rounded-2xl border bg-card text-card-foreground shadow-sm/4 not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-2xl)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:shadow-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)]">
+      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/92 text-card-foreground shadow-sm/4 not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-2xl)-1px)] before:bg-linear-to-b before:from-foreground/[0.035] before:to-transparent before:shadow-[0_1px_--theme(--color-black/4%)] dark:bg-card/82 dark:shadow-none dark:before:from-white/[0.045] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]">
         {children}
       </div>
     </section>
@@ -127,8 +134,8 @@ export function SettingsPageContainer({
   className?: string;
 }) {
   return (
-    <div className="scrollbar-gutter-both flex-1 overflow-y-auto p-6 sm:p-8">
-      <div className={cn("mx-auto flex w-full max-w-3xl flex-col gap-8", className)}>
+    <div className="scrollbar-gutter-both flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--foreground)_4%,transparent),transparent_34rem)] p-4 sm:p-8">
+      <div className={cn("mx-auto flex w-full max-w-4xl flex-col gap-8", className)}>
         {children}
       </div>
     </div>

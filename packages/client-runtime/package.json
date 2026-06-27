@@ -130,6 +130,10 @@
     "./state/vcs": {
       "types": "./src/state/vcs.ts",
       "default": "./src/state/vcs.ts"
+    },
+    "./workspaceTerminal": {
+      "types": "./src/workspaceTerminal.ts",
+      "default": "./src/workspaceTerminal.ts"
     }
   },
   "scripts": {

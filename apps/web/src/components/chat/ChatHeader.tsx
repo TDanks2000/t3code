@@ -6,6 +6,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { ChevronRightIcon } from "lucide-react";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
@@ -17,6 +18,7 @@ import ProjectScriptsControl, {
 import { OpenInPicker } from "./OpenInPicker";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { cn } from "~/lib/utils";
+import { ThreadUsageChip } from "./ThreadUsageChip";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
@@ -79,6 +81,12 @@ export const ChatHeader = memo(function ChatHeader({
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+        {activeProjectName ? (
+          <span className="hidden max-w-[40%] shrink-0 items-center gap-1.5 text-sm text-muted-foreground/55 @md/header-actions:flex">
+            <span className="truncate">{activeProjectName}</span>
+            <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/35" aria-hidden />
+          </span>
+        ) : null}
         <Tooltip>
           <TooltipTrigger
             render={
@@ -92,6 +100,7 @@ export const ChatHeader = memo(function ChatHeader({
           />
           <TooltipPopup side="top">{activeThreadTitle}</TooltipPopup>
         </Tooltip>
+        <ThreadUsageChip environmentId={activeThreadEnvironmentId} threadId={activeThreadId} />
       </div>
       <div
         data-chat-header-actions

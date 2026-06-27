@@ -15,6 +15,7 @@ import {
   type OrchestrationProposedPlan,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
+  type OrchestrationThreadShell,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
@@ -35,7 +36,8 @@ import { TurnCostRepositoryLive } from "../../persistence/Layers/TurnCosts.ts";
 import { ToolInvocationRepository } from "../../persistence/Services/ToolInvocations.ts";
 import { ToolInvocationRepositoryLive } from "../../persistence/Layers/ToolInvocations.ts";
 import { isGitRepository } from "../../git/Utils.ts";
-import { getModelPricing, computeCost } from "@t3tools/contracts";
+import { computeCost } from "@t3tools/contracts";
+import { normalizeModelSlug } from "@t3tools/shared/model";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -676,7 +678,119 @@ const make = Effect.gen(function* () {
   // Tracks the most recent per-turn token snapshot from thread.token-usage.updated events
   // so that providers that don't embed usage in turn.completed (Codex, Grok, OpenCode, Cursor)
   // can still have their token counts recorded for usage stats.
-  const latestTokenUsageByThread = new Map<ThreadId, ThreadTokenUsageSnapshot>();
+  const latestTokenUsageByTurn = new Map<string, ThreadTokenUsageSnapshot>();
+
+  const resolveModelForThread = Effect.fn("resolveModelForThread")(function* (threadId: ThreadId) {
+    const sessions = yield* providerService.listSessions();
+    const session = sessions.find((entry) => entry.threadId === threadId);
+    return session?.model;
+  });
+
+  const recordTurnCost = Effect.fn("recordTurnCost")(function* (input: {
+    readonly event: ProviderRuntimeEvent;
+    readonly thread: OrchestrationThreadShell;
+    readonly turnId: TurnId;
+    readonly usage?: ThreadTokenUsageSnapshot;
+    readonly providerUsage?: unknown;
+  }) {
+    const finiteNonNegative = (value: unknown): number | undefined =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+    const providerUsage =
+      input.providerUsage && typeof input.providerUsage === "object"
+        ? (input.providerUsage as {
+            readonly input_tokens?: number;
+            readonly output_tokens?: number;
+            readonly cached_input_tokens?: number;
+            readonly inputTokens?: number;
+            readonly outputTokens?: number;
+            readonly cachedReadTokens?: number | null;
+            readonly cachedWriteTokens?: number | null;
+            readonly thoughtTokens?: number | null;
+          })
+        : undefined;
+    const eventPayload = input.event.payload as {
+      readonly totalCostUsd?: unknown;
+      readonly modelUsage?: unknown;
+    };
+    const providerReportedCostUsd =
+      typeof eventPayload.totalCostUsd === "number" ? eventPayload.totalCostUsd : undefined;
+
+    let inputTokens =
+      finiteNonNegative(providerUsage?.input_tokens) ??
+      finiteNonNegative(providerUsage?.inputTokens) ??
+      0;
+    let outputTokens =
+      finiteNonNegative(providerUsage?.output_tokens) ??
+      finiteNonNegative(providerUsage?.outputTokens) ??
+      0;
+    let cachedInputTokens =
+      finiteNonNegative(providerUsage?.cached_input_tokens) ??
+      (finiteNonNegative(providerUsage?.cachedReadTokens) ?? 0) +
+        (finiteNonNegative(providerUsage?.cachedWriteTokens) ?? 0);
+    let reasoningTokens = finiteNonNegative(providerUsage?.thoughtTokens) ?? 0;
+    let durationMs = 0;
+
+    if (inputTokens === 0 && outputTokens === 0 && providerReportedCostUsd === undefined) {
+      const usage = input.usage;
+      if (usage) {
+        inputTokens = usage.lastInputTokens ?? usage.inputTokens ?? 0;
+        outputTokens = usage.lastOutputTokens ?? usage.outputTokens ?? 0;
+        cachedInputTokens = usage.lastCachedInputTokens ?? usage.cachedInputTokens ?? 0;
+        reasoningTokens = usage.lastReasoningOutputTokens ?? usage.reasoningOutputTokens ?? 0;
+        durationMs = usage.durationMs ?? 0;
+      }
+    }
+
+    const modelUsageRecord = eventPayload.modelUsage;
+    const modelFromUsage =
+      modelUsageRecord && typeof modelUsageRecord === "object"
+        ? (Object.keys(modelUsageRecord).find((k) => typeof k === "string") ?? undefined)
+        : undefined;
+
+    const model =
+      modelFromUsage ??
+      (yield* resolveModelForThread(input.thread.id)) ??
+      input.thread.modelSelection.model;
+
+    let costUsd: number | undefined;
+    if (providerReportedCostUsd !== undefined) {
+      costUsd = providerReportedCostUsd;
+    } else if (model) {
+      const normalizedModel = normalizeModelSlug(model, input.event.provider);
+      costUsd = normalizedModel
+        ? (computeCost(normalizedModel, inputTokens, outputTokens, cachedInputTokens) ?? 0)
+        : 0;
+    } else {
+      costUsd = 0;
+    }
+
+    yield* turnCostRepository
+      .insert({
+        turnId: input.turnId,
+        threadId: input.thread.id,
+        projectId: input.thread.projectId,
+        provider: input.event.provider,
+        model,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+        reasoningTokens,
+        totalTokens: inputTokens + outputTokens,
+        durationMs,
+        costUsd,
+        currency: "USD",
+        createdAt: input.event.createdAt,
+      })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to record turn cost", {
+            eventId: input.event.eventId,
+            turnId: input.turnId,
+            cause: Cause.pretty(cause),
+          }),
+        ),
+      );
+  });
 
   const resolveThreadDetail = Effect.fn("resolveThreadDetail")(function* (threadId: ThreadId) {
     return yield* projectionSnapshotQuery
@@ -1588,81 +1702,31 @@ const make = Effect.gen(function* () {
       }
 
       if (event.type === "thread.token-usage.updated" && event.payload.usage.usedTokens > 0) {
-        latestTokenUsageByThread.set(thread.id, event.payload.usage);
+        const usageTurnId = toTurnId(event.turnId);
+        if (usageTurnId) {
+          latestTokenUsageByTurn.set(providerTurnKey(thread.id, usageTurnId), event.payload.usage);
+          if (event.provider !== "claudeAgent") {
+            yield* recordTurnCost({
+              event,
+              thread,
+              turnId: usageTurnId,
+              usage: event.payload.usage,
+            });
+          }
+        }
       }
 
       if (event.type === "turn.completed") {
         const turnId = toTurnId(event.turnId);
         if (turnId) {
-          const usage = event.payload.usage as
-            | { input_tokens?: number; output_tokens?: number; cached_input_tokens?: number }
-            | undefined;
-          let inputTokens = typeof usage?.input_tokens === "number" ? usage.input_tokens : 0;
-          let outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : 0;
-          let cachedInputTokens =
-            typeof usage?.cached_input_tokens === "number" ? usage.cached_input_tokens : 0;
-          let reasoningTokens = 0;
-          let durationMs = 0;
-
-          // Providers that don't embed usage in turn.completed (Codex, Grok, OpenCode, Cursor)
-          // emit thread.token-usage.updated events with last-turn token counts. Use them as
-          // fallback when the completion event carries no usage data.
-          if (
-            inputTokens === 0 &&
-            outputTokens === 0 &&
-            typeof event.payload.totalCostUsd !== "number"
-          ) {
-            const cachedUsage = latestTokenUsageByThread.get(thread.id);
-            if (cachedUsage) {
-              inputTokens = cachedUsage.lastInputTokens ?? 0;
-              outputTokens = cachedUsage.lastOutputTokens ?? 0;
-              cachedInputTokens = cachedUsage.lastCachedInputTokens ?? 0;
-              reasoningTokens = cachedUsage.lastReasoningOutputTokens ?? 0;
-              durationMs = cachedUsage.durationMs ?? 0;
-            }
-          }
-
-          const model =
-            typeof event.payload.modelUsage?.model === "string"
-              ? event.payload.modelUsage.model
-              : undefined;
-
-          let costUsd: number | undefined;
-          // Prefer the provider-reported cost (Claude SDK provides this).
-          if (typeof event.payload.totalCostUsd === "number") {
-            costUsd = event.payload.totalCostUsd;
-          } else if (model) {
-            costUsd = computeCost(model, inputTokens, outputTokens, cachedInputTokens) ?? 0;
-          } else {
-            costUsd = 0;
-          }
-
-          yield* turnCostRepository
-            .insert({
-              turnId,
-              threadId: thread.id,
-              projectId: thread.projectId,
-              provider: event.provider,
-              model,
-              inputTokens,
-              outputTokens,
-              cachedInputTokens,
-              reasoningTokens,
-              totalTokens: inputTokens + outputTokens,
-              durationMs,
-              costUsd,
-              currency: "USD",
-              createdAt: now,
-            })
-            .pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("failed to record turn cost", {
-                  eventId: event.eventId,
-                  turnId,
-                  cause: Cause.pretty(cause),
-                }),
-              ),
-            );
+          const cachedUsage = latestTokenUsageByTurn.get(providerTurnKey(thread.id, turnId));
+          yield* recordTurnCost({
+            event,
+            thread,
+            turnId,
+            ...(cachedUsage ? { usage: cachedUsage } : {}),
+            ...(event.payload.usage !== undefined ? { providerUsage: event.payload.usage } : {}),
+          });
         }
       }
 

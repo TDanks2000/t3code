@@ -44,6 +44,8 @@ const CODEX_PRESENTATION = {
 
 export interface CodexAppServerProviderSnapshot {
   readonly account: CodexSchema.V2GetAccountResponse;
+  readonly rateLimits?: CodexSchema.V2GetAccountRateLimitsResponse;
+  readonly tokenUsage?: CodexSchema.V2GetAccountTokenUsageResponse;
   readonly version: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel>;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
@@ -355,18 +357,22 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
-  const [skillsResponse, models] = yield* Effect.all(
+  const [skillsResponse, models, rateLimits, tokenUsage] = yield* Effect.all(
     [
       client.request("skills/list", {
         cwds: [input.cwd],
       }),
       requestAllCodexModels(client),
+      client.request("account/rateLimits/read", undefined).pipe(Effect.option),
+      client.request("account/usage/read", undefined).pipe(Effect.option),
     ],
     { concurrency: "unbounded" },
   );
 
   return {
     account: accountResponse,
+    ...(Option.isSome(rateLimits) ? { rateLimits: rateLimits.value } : {}),
+    ...(Option.isSome(tokenUsage) ? { tokenUsage: tokenUsage.value } : {}),
     version,
     models: appendCustomCodexModels(models, input.customModels ?? []),
     skills: parseCodexSkillsListResponse(skillsResponse, input.cwd),
@@ -550,6 +556,14 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   const snapshot = probeResult.success.value;
   const accountStatus = accountProbeStatus(snapshot.account);
+  const usageLimits =
+    snapshot.rateLimits || snapshot.tokenUsage
+      ? {
+          createdAt: checkedAt,
+          ...(snapshot.rateLimits ? { rateLimits: snapshot.rateLimits } : {}),
+          ...(snapshot.tokenUsage ? { tokenUsage: snapshot.tokenUsage } : {}),
+        }
+      : undefined;
 
   return buildServerProvider({
     presentation: CODEX_PRESENTATION,
@@ -564,6 +578,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       auth: accountStatus.auth,
       ...(accountStatus.message ? { message: accountStatus.message } : {}),
     },
+    ...(usageLimits ? { usageLimits } : {}),
   });
 });
 

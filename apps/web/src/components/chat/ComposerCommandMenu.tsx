@@ -20,6 +20,14 @@ import {
 } from "../ui/command";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { PierreEntryIcon } from "./PierreEntryIcon";
+import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+
+export type SkillCommandProviderContext = {
+  driverKind: ProviderDriverKind;
+  displayName: string;
+  accentColor?: string | undefined;
+  showBadge: boolean;
+};
 
 export type ComposerCommandItem =
   | {
@@ -116,6 +124,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   groupSlashCommandSections?: boolean;
   emptyStateText?: string;
   activeItemId: string | null;
+  skillProviderContext?: SkillCommandProviderContext | undefined;
   onHighlightedItemChange: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
@@ -165,6 +174,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                       item={item}
                       resolvedTheme={props.resolvedTheme}
                       isActive={props.activeItemId === item.id}
+                      skillProviderContext={props.skillProviderContext}
                       onHighlight={props.onHighlightedItemChange}
                       onSelect={props.onSelect}
                     />
@@ -208,11 +218,14 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
   item: ComposerCommandItem;
   resolvedTheme: "light" | "dark";
   isActive: boolean;
+  skillProviderContext?: SkillCommandProviderContext | undefined;
   onHighlight: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
   const skillSourceLabel =
     props.item.type === "skill" ? formatProviderSkillInstallSource(props.item.skill) : null;
+  const skillScope =
+    props.item.type === "skill" ? (props.item.skill.scope ?? null) : null;
 
   const itemContent = (
     <CommandItem
@@ -248,18 +261,35 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         </span>
       ) : null}
       {props.item.type === "skill" ? (
-        <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground/80">
-          <SkillGlyph className="size-3.5" />
-        </span>
+        props.skillProviderContext ? (
+          <ProviderInstanceIcon
+            driverKind={props.skillProviderContext.driverKind}
+            displayName={props.skillProviderContext.displayName}
+            accentColor={props.skillProviderContext.accentColor}
+            showBadge={props.skillProviderContext.showBadge}
+            className={props.skillProviderContext.showBadge ? "size-5" : "size-4"}
+            iconClassName="size-3.5 text-muted-foreground/80"
+            indicatorBackground="var(--popover)"
+            badgeClassName="h-3 min-w-3 px-0.5 text-[7px] right-[-0.125rem] bottom-[-0.125rem]"
+          />
+        ) : (
+          <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground/80">
+            <SkillGlyph className="size-3.5" />
+          </span>
+        )
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0">{props.item.label}</span>
-        <span className="min-w-0 flex-1 truncate text-muted-foreground/70 text-xs">
+        <span className="shrink-0 font-medium">{props.item.label}</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground/60 text-xs">
           {props.item.description}
         </span>
       </span>
-      {skillSourceLabel ? (
-        <span className="shrink-0 pl-2 text-muted-foreground/70 text-xs">{skillSourceLabel}</span>
+      {skillScope ? (
+        <span className="shrink-0 rounded border border-fuchsia-500/20 bg-fuchsia-500/8 px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-fuchsia-700 dark:text-fuchsia-300">
+          {skillScope}
+        </span>
+      ) : skillSourceLabel ? (
+        <span className="shrink-0 pl-2 text-muted-foreground/60 text-xs">{skillSourceLabel}</span>
       ) : null}
     </CommandItem>
   );

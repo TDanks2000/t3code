@@ -145,6 +145,14 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:process-resource-history",
       tag: WS_METHODS.serverGetProcessResourceHistory,
     }),
+    usageSummary: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:usage-summary",
+      tag: WS_METHODS.serverGetUsageSummary,
+    }),
+    toolInvocations: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:tool-invocations",
+      tag: WS_METHODS.serverListToolInvocations,
+    }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:welcome",

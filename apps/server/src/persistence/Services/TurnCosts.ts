@@ -56,19 +56,40 @@ export interface TurnCostByModel {
   totalOutputTokens: number;
 }
 
+export interface TurnCostByThread {
+  threadId: string;
+  totalTurns: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
+export interface AccountLimitSnapshotRow {
+  provider: string;
+  threadId: string;
+  createdAt: string;
+  rateLimits: unknown;
+}
+
 export interface TurnCostRepositoryShape {
   readonly insert: (row: TurnCostRow) => Effect.Effect<void, ProjectionRepositoryError>;
 
   readonly listByThreadId: (
     threadId: ThreadId,
+    options?: { readonly limit?: number },
   ) => Effect.Effect<ReadonlyArray<TurnCostRow>, ProjectionRepositoryError>;
 
   readonly listByProjectId: (
     projectId: ProjectId,
+    options?: { readonly limit?: number },
   ) => Effect.Effect<ReadonlyArray<TurnCostRow>, ProjectionRepositoryError>;
 
   readonly aggregateByProject: (
     projectId: ProjectId,
+  ) => Effect.Effect<TurnCostTotals, ProjectionRepositoryError>;
+
+  readonly aggregateByThreadId: (
+    threadId: ThreadId,
   ) => Effect.Effect<TurnCostTotals, ProjectionRepositoryError>;
 
   readonly aggregateAll: Effect.Effect<TurnCostTotals, ProjectionRepositoryError>;
@@ -80,6 +101,16 @@ export interface TurnCostRepositoryShape {
 
   readonly aggregateByModelAll: Effect.Effect<
     ReadonlyArray<TurnCostByModel>,
+    ProjectionRepositoryError
+  >;
+
+  readonly aggregateByAllThreads: Effect.Effect<
+    ReadonlyArray<TurnCostByThread>,
+    ProjectionRepositoryError
+  >;
+
+  readonly listLatestAccountLimitSnapshots: Effect.Effect<
+    ReadonlyArray<AccountLimitSnapshotRow>,
     ProjectionRepositoryError
   >;
 }

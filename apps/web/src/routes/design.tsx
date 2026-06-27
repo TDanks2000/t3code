@@ -3,9 +3,11 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { ProviderInstanceId, type ModelSelection, type ProjectId } from "@t3tools/contracts";
 import { useStore } from "~/store";
 import { createThreadSelectorAcrossEnvironments } from "~/storeSelectors";
-import { usePrimaryEnvironmentId } from "~/environments/primary";
-import { useSettings } from "~/hooks/useSettings";
-import { useServerProviders } from "~/rpc/serverState";
+import { usePrimaryEnvironmentId } from "~/state/environments";
+import { readThreadDetail } from "~/state/entities";
+import { usePrimarySettings } from "~/hooks/useSettings";
+import { useAtomValue } from "@effect/atom-react";
+import { primaryServerProvidersAtom } from "~/state/server";
 import { resolveAppModelSelectionState } from "~/modelSelection";
 import { readEnvironmentApi } from "~/environmentApi";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
@@ -32,12 +34,12 @@ function DesignRoute() {
   const [contextDialogKind, setContextDialogKind] = useState<string | null>(null);
   const processedTurnRef = useRef<string | null>(null);
 
-  const settings = useSettings();
+  const settings = usePrimarySettings();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
-  const serverProviders = useServerProviders();
+  const serverProviders = useAtomValue(primaryServerProvidersAtom);
 
   const firstProjectId = useStore((s): ProjectId | null => {
-    for (const envState of Object.values(s.environmentStateById)) {
+    for (const envState of Object.values(s.environments)) {
       const ids = envState.projectIds;
       if (ids.length > 0) {
         const firstId = ids[0]!;
@@ -48,12 +50,12 @@ function DesignRoute() {
     return null;
   });
   const firstProjectCwd = useStore((s): string | undefined => {
-    for (const envState of Object.values(s.environmentStateById)) {
+    for (const envState of Object.values(s.environments)) {
       const ids = envState.projectIds;
       if (ids.length > 0) {
         const firstId = ids[0]!;
         const project = envState.projectById[firstId];
-        if (project) return project.cwd;
+        if (project) return project.workspaceRoot;
       }
     }
     return undefined;
@@ -78,14 +80,14 @@ function DesignRoute() {
     () => createThreadSelectorAcrossEnvironments(state.threadId),
     [state.threadId],
   );
-  const thread = useStore(threadSelector);
+  const threadShell = useStore(threadSelector);
 
   // When a turn settles, extract the artifact path and load the HTML
   useEffect(() => {
-    if (!thread) return;
+    if (!threadShell) return;
     if (state.generationState.status !== "generating") return;
 
-    const latestTurn = thread.latestTurn;
+    const latestTurn = threadShell.latestTurn;
     if (!latestTurn) return;
     if (latestTurn.state === "running") return;
 
@@ -104,7 +106,11 @@ function DesignRoute() {
     }
 
     const assistantMessageId = latestTurn.assistantMessageId;
-    const messages = thread.messages;
+    const thread = readThreadDetail({
+      environmentId: threadShell.environmentId,
+      threadId: threadShell.id,
+    });
+    const messages = thread?.messages ?? [];
     const assistantMsg = assistantMessageId
       ? messages.find((m) => m.id === assistantMessageId)
       : [...messages].reverse().find((m) => m.role === "assistant" && !m.streaming);
@@ -191,7 +197,7 @@ function DesignRoute() {
           }),
         );
       });
-  }, [thread, state.generationState.status, environmentId, firstProjectCwd]);
+  }, [threadShell, state.generationState.status, environmentId, firstProjectCwd]);
 
   const handleOpenContextDialog = useCallback((kind: string) => {
     setContextDialogKind(kind);

@@ -1771,14 +1771,19 @@ describe("image_view preview extraction", () => {
     const entries = deriveWorkLogEntries([
       makeImageViewActivity({ nested: { deep: { path: "/home/user/photo.jpg" } } }),
     ]);
-    expect(entries[0]?.imagePreviews?.[0]?.path).toBe("/home/user/photo.jpg");
+    const firstPreview = entries[0]?.imagePreviews?.[0];
+    expect(firstPreview?.kind === "workspace_file" ? firstPreview.path : undefined).toBe(
+      "/home/user/photo.jpg",
+    );
   });
 
   it("extracts image paths from arrays", () => {
     const entries = deriveWorkLogEntries([
       makeImageViewActivity({ paths: ["/a/foo.png", "/b/bar.webp"] }),
     ]);
-    const paths = entries[0]?.imagePreviews?.map((p) => p.path) ?? [];
+    const paths =
+      entries[0]?.imagePreviews?.flatMap((p) => (p.kind === "workspace_file" ? [p.path] : [])) ??
+      [];
     expect(paths).toContain("/a/foo.png");
     expect(paths).toContain("/b/bar.webp");
   });
@@ -1822,6 +1827,69 @@ describe("image_view preview extraction", () => {
         payload: {
           itemType: "file_read",
           data: { item: { input: { file_path: "/workspace/photo.png" } } },
+        },
+      }),
+    ]);
+    expect(entries[0]?.imagePreviews).toBeUndefined();
+  });
+
+  it("surfaces a persisted preview_snapshot screenshot as a server_path preview", () => {
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        kind: "tool.completed",
+        summary: "Inspect browser page",
+        tone: "tool",
+        payload: {
+          itemType: "mcp_tool_call",
+          data: {
+            item: {
+              type: "mcpToolCall",
+              server: "t3-code",
+              tool: "preview_snapshot",
+              result: {
+                structuredContent: {
+                  screenshot: {
+                    mimeType: "image/png",
+                    width: 1280,
+                    height: 720,
+                    previewPath: "/attachments/screenshots/thread-abc-1234.png",
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    expect(entries[0]?.imagePreviews).toEqual([
+      {
+        kind: "server_path",
+        id: "screenshot:/attachments/screenshots/thread-abc-1234.png",
+        name: "Screenshot",
+        src: "/attachments/screenshots/thread-abc-1234.png",
+      },
+    ]);
+  });
+
+  it("ignores a screenshot previewPath that points outside the screenshots route", () => {
+    const entries = deriveWorkLogEntries([
+      makeActivity({
+        kind: "tool.completed",
+        summary: "Inspect browser page",
+        tone: "tool",
+        payload: {
+          itemType: "mcp_tool_call",
+          data: {
+            item: {
+              type: "mcpToolCall",
+              tool: "preview_snapshot",
+              result: {
+                structuredContent: {
+                  screenshot: { previewPath: "/etc/passwd" },
+                },
+              },
+            },
+          },
         },
       }),
     ]);

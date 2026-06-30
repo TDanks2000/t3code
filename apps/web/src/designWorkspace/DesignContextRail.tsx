@@ -1,4 +1,11 @@
-import { CheckIcon, ChevronDownIcon, ImageIcon, PaintbrushIcon, PaletteIcon, FigmaIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ImageIcon,
+  PaintbrushIcon,
+  PaletteIcon,
+  FigmaIcon,
+} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { DesignPromptComposer } from "./DesignPromptComposer";
 import type {
@@ -89,9 +96,7 @@ export function DesignContextRail({
                     {isAdded ? <CheckIcon className="size-3.5" /> : <Icon className="size-3.5" />}
                   </span>
                   <span className="flex-1 text-left">{label}</span>
-                  {isAdded && (
-                    <span className="text-[10px] text-[#667f55]">added</span>
-                  )}
+                  {isAdded && <span className="text-[10px] text-[#667f55]">added</span>}
                 </button>
               );
             })}

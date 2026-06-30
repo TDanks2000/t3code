@@ -37,7 +37,7 @@ const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.UnknownFromJ
 const OPENCODE_EMPTY_CONFIG_CONTENT = "{}";
 
 const OPENCODE_SERVER_READY_PREFIX = "opencode server listening";
-const DEFAULT_OPENCODE_SERVER_TIMEOUT_MS = 5_000;
+const DEFAULT_OPENCODE_SERVER_TIMEOUT_MS = 10_000;
 const DEFAULT_HOSTNAME = "127.0.0.1";
 export interface OpenCodeServerProcess {
   readonly url: string;
@@ -502,9 +502,10 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
     );
   };
 
-  const createOpenCodeSdkClient: OpenCodeRuntimeShape["createOpenCodeSdkClient"] = (input) =>
-    createOpencodeClient({
-      baseUrl: input.baseUrl,
+  const createOpenCodeSdkClient: OpenCodeRuntimeShape["createOpenCodeSdkClient"] = (input) => {
+    const baseUrl = input.baseUrl.replace(/\/+$/, "");
+    return createOpencodeClient({
+      baseUrl,
       directory: input.directory,
       ...(input.serverPassword
         ? {
@@ -515,6 +516,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
         : {}),
       throwOnError: true,
     });
+  };
 
   const loadProviders = (client: OpencodeClient) =>
     runOpenCodeSdk("provider.list", () => client.provider.list()).pipe(

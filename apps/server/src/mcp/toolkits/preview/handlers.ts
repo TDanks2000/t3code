@@ -52,8 +52,7 @@ const handlers = {
   preview_recording_start: () => invoke<PreviewAutomationRecordingStatus>("recordingStart", {}),
   preview_recording_stop: () => invoke<PreviewAutomationRecordingArtifact>("recordingStop", {}),
   preview_hover: (input) => invoke<void>("hover", input).pipe(Effect.as(null)),
-  preview_select: (input) =>
-    invoke<void>("select", input, input.timeoutMs).pipe(Effect.as(null)),
+  preview_select: (input) => invoke<void>("select", input, input.timeoutMs).pipe(Effect.as(null)),
   preview_tab_list: () => invoke<PreviewAutomationTabList>("tabList", {}),
   preview_tab_switch: (input) => invoke<PreviewAutomationStatus>("tabSwitch", input),
   preview_tab_close: (input) => invoke<void>("tabClose", input).pipe(Effect.as(null)),

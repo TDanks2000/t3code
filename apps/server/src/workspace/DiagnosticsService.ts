@@ -12,10 +12,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { ProcessRunner } from "../processRunner.ts";
-import {
-  DiagnosticsService,
-  type DiagnosticsServiceShape,
-} from "./Services/DiagnosticsService.ts";
+import { DiagnosticsService, type DiagnosticsServiceShape } from "./Services/DiagnosticsService.ts";
 
 const DIAGNOSTICS_TIMEOUT = Duration.seconds(120);
 const DIAGNOSTICS_OUTPUT_PREVIEW_MAX_BYTES = 256 * 1024;

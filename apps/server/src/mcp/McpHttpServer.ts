@@ -139,7 +139,10 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
   // of the attachments dir, which the attachment reapers skip (they read the
   // root non-recursively), so message-prune never deletes it. Best-effort: a
   // write failure must not fail the tool call the model is waiting on.
-  const persistScreenshot = (threadId: McpInvocationContext.McpInvocationScope["threadId"], data: string) =>
+  const persistScreenshot = (
+    threadId: McpInvocationContext.McpInvocationScope["threadId"],
+    data: string,
+  ) =>
     Effect.gen(function* () {
       const id = createAttachmentId(threadId);
       if (!id) {
@@ -154,9 +157,7 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
       return `${ATTACHMENTS_ROUTE_PREFIX}/${PREVIEW_SCREENSHOTS_SUBDIR}/${fileName}`;
     }).pipe(
       Effect.catchCause((cause) =>
-        Effect.logWarning("failed to persist preview screenshot", { cause }).pipe(
-          Effect.as(null),
-        ),
+        Effect.logWarning("failed to persist preview screenshot", { cause }).pipe(Effect.as(null)),
       ),
     );
   yield* server.addTool({

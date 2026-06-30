@@ -16,6 +16,7 @@ related:
 **Cost/usage tracking is broken for every provider except Claude.** Three independent gaps mean Codex, Grok, Cursor, and OpenCode turns always record $0.00 cost and 0 tokens. Fixing this pipeline is a prerequisite for per-thread usage stats — building UI on top of a broken pipe would show $0.00 for 4/5 providers.
 
 Read these files first:
+
 - `apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1590-1665` — the cost ingestion pipeline
 - `packages/contracts/src/pricing.ts` — model pricing table
 - `packages/contracts/src/model.ts:157-198` — model alias mappings
@@ -121,6 +122,7 @@ For each non-Claude adapter, extract token counts from the provider's turn-compl
 - **OpenCodeAdapter** (`OpenCodeAdapter.ts:916, 945, 1259`): Map step-completion `input`/`output` token counts to `{ input_tokens, output_tokens }`.
 
 The shape should match what the ingestion expects:
+
 ```typescript
 payload: {
   ...existingFields,

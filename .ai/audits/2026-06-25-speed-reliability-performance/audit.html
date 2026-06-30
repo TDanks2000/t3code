@@ -1,244 +1,680 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Speed, Reliability &amp; Performance Audit</title>
-  <meta name="strategist-type" content="audit">
-  <meta name="strategist-slug" content="speed-reliability-performance">
-  <meta name="strategist-created" content="2026-06-25">
-  <meta name="strategist-status" content="ready">
-  <meta name="strategist-target" content="apps/server, apps/web, packages/client-runtime">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; line-height: 1.6; color: #1a1a1a; background: #fafafa; padding: 2rem 1rem; }
-    main { max-width: 860px; margin: 0 auto; }
-    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
-    h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.25rem; }
-    h3 { font-size: 1rem; margin: 1.25rem 0 0.25rem; color: #333; }
-    p, li { margin-bottom: 0.5rem; }
-    ul, ol { padding-left: 1.4rem; }
-    code { font-family: ui-monospace, monospace; font-size: 0.875rem; background: #f0f0f0; padding: 0.1em 0.3em; border-radius: 3px; }
-    pre { background: #f0f0f0; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
-    pre code { background: none; padding: 0; }
-    .badge { display: inline-block; padding: 0.15em 0.5em; border-radius: 3px; font-size: 0.8rem; font-weight: 600; margin-right: 0.4rem; }
-    .critical { background: #fee2e2; color: #991b1b; }
-    .high { background: #fef3c7; color: #92400e; }
-    .medium { background: #dbeafe; color: #1e40af; }
-    .low { background: #f0fdf4; color: #166534; }
-    .finding { border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem 1.2rem; margin: 1rem 0; background: #fff; }
-    .finding h3 { margin-top: 0; }
-    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-    th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.9rem; }
-    th { background: #f4f4f4; font-weight: 600; }
-    .tldr { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 0.75rem 1rem; border-radius: 0 4px 4px 0; margin: 1rem 0; }
-    .sequence { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem 1.2rem; margin: 0.5rem 0; }
-  </style>
-</head>
-<body>
-<main>
-  <h1>Speed, Reliability &amp; Performance Audit</h1>
-  <p style="color:#666;font-size:0.9rem;">T3 Code · 2026-06-25 · <code>apps/server</code>, <code>apps/web</code>, <code>packages/client-runtime</code></p>
-
-  <section aria-labelledby="tldr">
-    <h2 id="tldr">TL;DR</h2>
-    <div class="tldr">
-      <p>
-        Five substantive performance and reliability gaps identified across the server and web layers.
-        The most impactful is the O(N) flat-array read model in the event projector, which causes
-        linear-time thread scans on every dispatched event and becomes measurably slow at scale.
-        The second-highest value change is confirming and enabling SQLite WAL mode, which costs one
-        line and meaningfully improves write throughput. Three medium-priority issues cover unbounded
-        SQL result sets, cache-key scans on session teardown, and redundant Zustand selector work in
-        the web client. No data-loss or security issues were found in this audit scope.
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Speed, Reliability &amp; Performance Audit</title>
+    <meta name="strategist-type" content="audit" />
+    <meta name="strategist-slug" content="speed-reliability-performance" />
+    <meta name="strategist-created" content="2026-06-25" />
+    <meta name="strategist-status" content="ready" />
+    <meta name="strategist-target" content="apps/server, apps/web, packages/client-runtime" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        line-height: 1.6;
+        color: #1a1a1a;
+        background: #fafafa;
+        padding: 2rem 1rem;
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.8rem;
+        margin-bottom: 0.25rem;
+      }
+      h2 {
+        font-size: 1.25rem;
+        margin: 2rem 0 0.5rem;
+        border-bottom: 2px solid #e0e0e0;
+        padding-bottom: 0.25rem;
+      }
+      h3 {
+        font-size: 1rem;
+        margin: 1.25rem 0 0.25rem;
+        color: #333;
+      }
+      p,
+      li {
+        margin-bottom: 0.5rem;
+      }
+      ul,
+      ol {
+        padding-left: 1.4rem;
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 0.875rem;
+        background: #f0f0f0;
+        padding: 0.1em 0.3em;
+        border-radius: 3px;
+      }
+      pre {
+        background: #f0f0f0;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        font-size: 0.85rem;
+        margin: 0.5rem 0 1rem;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.15em 0.5em;
+        border-radius: 3px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-right: 0.4rem;
+      }
+      .critical {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .high {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .medium {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .low {
+        background: #f0fdf4;
+        color: #166534;
+      }
+      .finding {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 1rem 1.2rem;
+        margin: 1rem 0;
+        background: #fff;
+      }
+      .finding h3 {
+        margin-top: 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1rem 0;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+        font-size: 0.9rem;
+      }
+      th {
+        background: #f4f4f4;
+        font-weight: 600;
+      }
+      .tldr {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 0.75rem 1rem;
+        border-radius: 0 4px 4px 0;
+        margin: 1rem 0;
+      }
+      .sequence {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 1rem 1.2rem;
+        margin: 0.5rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Speed, Reliability &amp; Performance Audit</h1>
+      <p style="color: #666; font-size: 0.9rem">
+        T3 Code · 2026-06-25 · <code>apps/server</code>, <code>apps/web</code>,
+        <code>packages/client-runtime</code>
       </p>
-    </div>
-  </section>
 
-  <section aria-labelledby="codebase-understanding">
-    <h2 id="codebase-understanding">Codebase Understanding</h2>
-    <h3>Stack</h3>
-    <ul>
-      <li><strong>Runtime</strong>: Node ≥24 / Bun, pnpm workspaces, vite-plus build tooling</li>
-      <li><strong>Backend</strong> (<code>apps/server</code>): Effect-TS 4.0 beta, <code>@effect/sql-sqlite-bun</code>, WebSocket RPC (<code>effect/unstable/rpc</code>), Anthropic Claude SDK, OpenCode SDK</li>
-      <li><strong>Frontend</strong> (<code>apps/web</code>): React, Zustand, TanStack Router, <code>@effect/atom-react</code></li>
-      <li><strong>Client runtime</strong> (<code>packages/client-runtime</code>): Effect Atoms driving RPC subscriptions</li>
-      <li><strong>Contracts</strong> (<code>packages/contracts</code>): Shared Schema types, RPC group definitions</li>
-    </ul>
+      <section aria-labelledby="tldr">
+        <h2 id="tldr">TL;DR</h2>
+        <div class="tldr">
+          <p>
+            Five substantive performance and reliability gaps identified across the server and web
+            layers. The most impactful is the O(N) flat-array read model in the event projector,
+            which causes linear-time thread scans on every dispatched event and becomes measurably
+            slow at scale. The second-highest value change is confirming and enabling SQLite WAL
+            mode, which costs one line and meaningfully improves write throughput. Three
+            medium-priority issues cover unbounded SQL result sets, cache-key scans on session
+            teardown, and redundant Zustand selector work in the web client. No data-loss or
+            security issues were found in this audit scope.
+          </p>
+        </div>
+      </section>
 
-    <h3>Architecture</h3>
-    <ul>
-      <li>Event-sourced orchestration: commands → events persisted to SQLite, applied to an in-memory <code>OrchestrationReadModel</code> via <code>projectEvent()</code>, and fan-out to projection tables.</li>
-      <li>Provider ingestion: a single <code>makeDrainableWorker</code> serializes all provider runtime events through <code>processRuntimeEvent()</code> in <code>ProviderRuntimeIngestion.ts</code>.</li>
-      <li>Per-event <code>Effect.Cache</code> instances buffer streaming assistant text, segment state, and proposed-plan deltas in memory.</li>
-      <li>WebSocket RPC layer in <code>ws.ts</code> exposes orchestration subscriptions to the web client.</li>
-      <li>SQLite schema has 33 migrations; turn costs and tool invocations were added in migration 033.</li>
-    </ul>
+      <section aria-labelledby="codebase-understanding">
+        <h2 id="codebase-understanding">Codebase Understanding</h2>
+        <h3>Stack</h3>
+        <ul>
+          <li>
+            <strong>Runtime</strong>: Node ≥24 / Bun, pnpm workspaces, vite-plus build tooling
+          </li>
+          <li>
+            <strong>Backend</strong> (<code>apps/server</code>): Effect-TS 4.0 beta,
+            <code>@effect/sql-sqlite-bun</code>, WebSocket RPC (<code>effect/unstable/rpc</code>),
+            Anthropic Claude SDK, OpenCode SDK
+          </li>
+          <li>
+            <strong>Frontend</strong> (<code>apps/web</code>): React, Zustand, TanStack Router,
+            <code>@effect/atom-react</code>
+          </li>
+          <li>
+            <strong>Client runtime</strong> (<code>packages/client-runtime</code>): Effect Atoms
+            driving RPC subscriptions
+          </li>
+          <li>
+            <strong>Contracts</strong> (<code>packages/contracts</code>): Shared Schema types, RPC
+            group definitions
+          </li>
+        </ul>
 
-    <h3>Relevant Constraints</h3>
-    <ul>
-      <li><code>MAX_THREAD_MESSAGES = 2_000</code> and <code>MAX_THREAD_CHECKPOINTS = 500</code> cap in-memory per-thread collections.</li>
-      <li>All provider events funnel through one serial worker; concurrency inside event processing is intentionally limited.</li>
-      <li><code>STRICT_PROVIDER_LIFECYCLE_GUARD</code> is on by default; lifecycle events gate multiple code paths.</li>
-    </ul>
-  </section>
+        <h3>Architecture</h3>
+        <ul>
+          <li>
+            Event-sourced orchestration: commands → events persisted to SQLite, applied to an
+            in-memory <code>OrchestrationReadModel</code> via <code>projectEvent()</code>, and
+            fan-out to projection tables.
+          </li>
+          <li>
+            Provider ingestion: a single <code>makeDrainableWorker</code> serializes all provider
+            runtime events through <code>processRuntimeEvent()</code> in
+            <code>ProviderRuntimeIngestion.ts</code>.
+          </li>
+          <li>
+            Per-event <code>Effect.Cache</code> instances buffer streaming assistant text, segment
+            state, and proposed-plan deltas in memory.
+          </li>
+          <li>
+            WebSocket RPC layer in <code>ws.ts</code> exposes orchestration subscriptions to the web
+            client.
+          </li>
+          <li>
+            SQLite schema has 33 migrations; turn costs and tool invocations were added in migration
+            033.
+          </li>
+        </ul>
 
-  <section aria-labelledby="findings">
-    <h2 id="findings">Findings by Priority</h2>
+        <h3>Relevant Constraints</h3>
+        <ul>
+          <li>
+            <code>MAX_THREAD_MESSAGES = 2_000</code> and
+            <code>MAX_THREAD_CHECKPOINTS = 500</code> cap in-memory per-thread collections.
+          </li>
+          <li>
+            All provider events funnel through one serial worker; concurrency inside event
+            processing is intentionally limited.
+          </li>
+          <li>
+            <code>STRICT_PROVIDER_LIFECYCLE_GUARD</code> is on by default; lifecycle events gate
+            multiple code paths.
+          </li>
+        </ul>
+      </section>
 
-    <!-- H1 -->
-    <div class="finding">
-      <h3><span class="badge high">High</span> F1 — O(N) read-model array scan on every orchestration event</h3>
-      <p><strong>Files</strong>: <code>apps/server/src/orchestration/projector.ts:64–70</code></p>
-      <p><strong>Problem</strong>: The <code>OrchestrationReadModel</code> stores projects and threads as flat <code>Array&lt;T&gt;</code>.
-        <code>updateThread()</code> calls <code>threads.map(t =&gt; t.id === id ? patch : t)</code>, which is an O(N) scan <em>and</em> a full array copy on every event.
-        <code>findMessageById</code> and <code>findProposedPlanById</code> in <code>ProviderRuntimeIngestion.ts:116–144</code> also scan linearly through potentially 2,000 messages per event.
-        At 50 threads × 1,000 messages each, a <code>turn.completed</code> event triggers several O(N) passes through a 50-element thread array and up to four passes through a 1,000-element message array.
-      </p>
-      <p><strong>Why it matters</strong>: The drainable worker is serial. Every extra microsecond of per-event work directly increases event-processing latency and can cause observable lag in streaming responses when many threads are active.</p>
-      <p><strong>Fix</strong>: Replace the <code>threads</code> and <code>projects</code> arrays in <code>OrchestrationReadModel</code> with <code>Map&lt;ThreadId, OrchestrationThread&gt;</code> and <code>Map&lt;ProjectId, OrchestrationProject&gt;</code>. <code>updateThread</code> becomes a <code>Map.set</code> instead of <code>.map()</code>. Consumers that need arrays (snapshot serialization, list RPCs) call <code>Array.from(map.values())</code> at read time. Similarly, index messages inside each thread by id: <code>messagesById: Map&lt;MessageId, OrchestrationMessage&gt;</code>.</p>
-      <p><strong>Risk</strong>: Medium. This is a structural change to the read model. Every projector case that spreads <code>nextBase</code> must be updated. Existing snapshot serialization/deserialization must convert between Map and Array. Add a projector unit test for the Map path before merging.</p>
-    </div>
+      <section aria-labelledby="findings">
+        <h2 id="findings">Findings by Priority</h2>
 
-    <!-- H2 -->
-    <div class="finding">
-      <h3><span class="badge high">High</span> F2 — SQLite WAL mode not confirmed enabled</h3>
-      <p><strong>Files</strong>: <code>apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts</code> (and sibling migrations), <code>apps/server/src/persistence/NodeSqliteClient.ts</code></p>
-      <p><strong>Problem</strong>: The 33 migration files do not show a <code>PRAGMA journal_mode=WAL</code> call. SQLite's default journal mode is DELETE (rollback journal). WAL mode allows concurrent reads during a write and dramatically reduces write latency for workloads like this one — frequent small inserts (events, turn costs, tool invocations) interleaved with reads (snapshot queries, RPC subscriptions).</p>
-      <p><strong>Why it matters</strong>: Without WAL, every write acquires an exclusive lock that blocks all concurrent reads, stalling RPC subscription queries during high-throughput turns.</p>
-      <p><strong>Fix</strong>: In <code>NodeSqliteClient.ts</code> (or the first migration), execute <code>PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;</code> immediately after opening the database. <code>PRAGMA synchronous=NORMAL</code> is safe for this workload (non-critical local data) and reduces fsync overhead significantly.</p>
-      <p><strong>Risk</strong>: Low. WAL is the standard recommendation for application SQLite. It requires the WAL file be on the same filesystem as the DB, which is always true here. Safe to ship with no migration needed — it is a connection-level pragma.</p>
-    </div>
+        <!-- H1 -->
+        <div class="finding">
+          <h3>
+            <span class="badge high">High</span> F1 — O(N) read-model array scan on every
+            orchestration event
+          </h3>
+          <p>
+            <strong>Files</strong>: <code>apps/server/src/orchestration/projector.ts:64–70</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: The <code>OrchestrationReadModel</code> stores projects and
+            threads as flat <code>Array&lt;T&gt;</code>. <code>updateThread()</code> calls
+            <code>threads.map(t =&gt; t.id === id ? patch : t)</code>, which is an O(N) scan
+            <em>and</em> a full array copy on every event. <code>findMessageById</code> and
+            <code>findProposedPlanById</code> in
+            <code>ProviderRuntimeIngestion.ts:116–144</code> also scan linearly through potentially
+            2,000 messages per event. At 50 threads × 1,000 messages each, a
+            <code>turn.completed</code> event triggers several O(N) passes through a 50-element
+            thread array and up to four passes through a 1,000-element message array.
+          </p>
+          <p>
+            <strong>Why it matters</strong>: The drainable worker is serial. Every extra microsecond
+            of per-event work directly increases event-processing latency and can cause observable
+            lag in streaming responses when many threads are active.
+          </p>
+          <p>
+            <strong>Fix</strong>: Replace the <code>threads</code> and <code>projects</code> arrays
+            in <code>OrchestrationReadModel</code> with
+            <code>Map&lt;ThreadId, OrchestrationThread&gt;</code> and
+            <code>Map&lt;ProjectId, OrchestrationProject&gt;</code>.
+            <code>updateThread</code> becomes a <code>Map.set</code> instead of <code>.map()</code>.
+            Consumers that need arrays (snapshot serialization, list RPCs) call
+            <code>Array.from(map.values())</code> at read time. Similarly, index messages inside
+            each thread by id:
+            <code>messagesById: Map&lt;MessageId, OrchestrationMessage&gt;</code>.
+          </p>
+          <p>
+            <strong>Risk</strong>: Medium. This is a structural change to the read model. Every
+            projector case that spreads <code>nextBase</code> must be updated. Existing snapshot
+            serialization/deserialization must convert between Map and Array. Add a projector unit
+            test for the Map path before merging.
+          </p>
+        </div>
 
-    <!-- M1 -->
-    <div class="finding">
-      <h3><span class="badge medium">Medium</span> F3 — Unbounded SQL result sets in TurnCost list queries</h3>
-      <p><strong>Files</strong>: <code>apps/server/src/persistence/Layers/TurnCosts.ts:56–107</code></p>
-      <p><strong>Problem</strong>: <code>listTurnCostsByThreadId</code> and <code>listTurnCostsByProjectId</code> both execute <code>SELECT ... FROM projection_turn_costs WHERE thread_id = $id ORDER BY created_at ASC</code> with no <code>LIMIT</code> clause. A thread with 500 turns returns 500 full rows. Since these are returned as <code>ReadonlyArray&lt;TurnCostRow&gt;</code> and may be used for in-memory aggregation, they will grow without bound.</p>
-      <p><strong>Why it matters</strong>: The aggregate queries (<code>aggregateByThreadId</code>, <code>aggregateAll</code>, etc.) already perform the aggregation in SQL — so the list queries are only useful for display or export. Returning unbounded rows for large threads is a reliability risk under memory pressure.</p>
-      <p><strong>Fix</strong>: Add a <code>LIMIT</code> parameter to <code>listTurnCostsByThreadId</code> and <code>listTurnCostsByProjectId</code>, defaulting to 200. Update <code>TurnCostRepositoryShape</code> and callers accordingly. Any place needing totals should use the aggregate queries, not the list queries.</p>
-      <p><strong>Risk</strong>: Low. Adds a default limit that callers can override. Verify all call sites to confirm none relies on the full unbounded result.</p>
-    </div>
+        <!-- H2 -->
+        <div class="finding">
+          <h3><span class="badge high">High</span> F2 — SQLite WAL mode not confirmed enabled</h3>
+          <p>
+            <strong>Files</strong>:
+            <code>apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts</code> (and
+            sibling migrations), <code>apps/server/src/persistence/NodeSqliteClient.ts</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: The 33 migration files do not show a
+            <code>PRAGMA journal_mode=WAL</code> call. SQLite's default journal mode is DELETE
+            (rollback journal). WAL mode allows concurrent reads during a write and dramatically
+            reduces write latency for workloads like this one — frequent small inserts (events, turn
+            costs, tool invocations) interleaved with reads (snapshot queries, RPC subscriptions).
+          </p>
+          <p>
+            <strong>Why it matters</strong>: Without WAL, every write acquires an exclusive lock
+            that blocks all concurrent reads, stalling RPC subscription queries during
+            high-throughput turns.
+          </p>
+          <p>
+            <strong>Fix</strong>: In <code>NodeSqliteClient.ts</code> (or the first migration),
+            execute <code>PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;</code> immediately
+            after opening the database. <code>PRAGMA synchronous=NORMAL</code> is safe for this
+            workload (non-critical local data) and reduces fsync overhead significantly.
+          </p>
+          <p>
+            <strong>Risk</strong>: Low. WAL is the standard recommendation for application SQLite.
+            It requires the WAL file be on the same filesystem as the DB, which is always true here.
+            Safe to ship with no migration needed — it is a connection-level pragma.
+          </p>
+        </div>
 
-    <!-- M2 -->
-    <div class="finding">
-      <h3><span class="badge medium">Medium</span> F4 — <code>clearTurnStateForSession</code> scans all Effect cache keys</h3>
-      <p><strong>Files</strong>: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1105–1147</code></p>
-      <p><strong>Problem</strong>: On <code>session.exited</code>, <code>clearTurnStateForSession</code> calls <code>Cache.keys(turnMessageIdsByTurnKey)</code>, <code>Cache.keys(assistantSegmentStateByTurnKey)</code>, and <code>Cache.keys(bufferedProposedPlanById)</code>, then filters by string prefix. With capacities of 10,000–20,000 entries, this is an O(cache-size) scan on every session exit. Sessions can exit frequently (provider restarts, interrupts, stops).</p>
-      <p><strong>Why it matters</strong>: Under high concurrency (many threads across many sessions), this can cause a measurable pause in the drainable worker every time a provider session exits.</p>
-      <p><strong>Fix</strong>: Maintain a <code>Map&lt;ThreadId, Set&lt;string&gt;&gt;</code> (turn keys per thread) updated eagerly whenever entries are added/removed from the caches. On session exit, use this index to delete only the relevant keys. This reduces the cleanup from O(cache-size) to O(active-keys-for-thread).</p>
-      <p><strong>Risk</strong>: Low-medium. The index must be kept in sync with cache mutations. Write a test verifying no key leaks after session cleanup.</p>
-    </div>
+        <!-- M1 -->
+        <div class="finding">
+          <h3>
+            <span class="badge medium">Medium</span> F3 — Unbounded SQL result sets in TurnCost list
+            queries
+          </h3>
+          <p>
+            <strong>Files</strong>:
+            <code>apps/server/src/persistence/Layers/TurnCosts.ts:56–107</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: <code>listTurnCostsByThreadId</code> and
+            <code>listTurnCostsByProjectId</code> both execute
+            <code
+              >SELECT ... FROM projection_turn_costs WHERE thread_id = $id ORDER BY created_at
+              ASC</code
+            >
+            with no <code>LIMIT</code> clause. A thread with 500 turns returns 500 full rows. Since
+            these are returned as <code>ReadonlyArray&lt;TurnCostRow&gt;</code> and may be used for
+            in-memory aggregation, they will grow without bound.
+          </p>
+          <p>
+            <strong>Why it matters</strong>: The aggregate queries
+            (<code>aggregateByThreadId</code>, <code>aggregateAll</code>, etc.) already perform the
+            aggregation in SQL — so the list queries are only useful for display or export.
+            Returning unbounded rows for large threads is a reliability risk under memory pressure.
+          </p>
+          <p>
+            <strong>Fix</strong>: Add a <code>LIMIT</code> parameter to
+            <code>listTurnCostsByThreadId</code> and <code>listTurnCostsByProjectId</code>,
+            defaulting to 200. Update <code>TurnCostRepositoryShape</code> and callers accordingly.
+            Any place needing totals should use the aggregate queries, not the list queries.
+          </p>
+          <p>
+            <strong>Risk</strong>: Low. Adds a default limit that callers can override. Verify all
+            call sites to confirm none relies on the full unbounded result.
+          </p>
+        </div>
 
-    <!-- M3 -->
-    <div class="finding">
-      <h3><span class="badge medium">Medium</span> F5 — Redundant Zustand selector work in web client selectors</h3>
-      <p><strong>Files</strong>: <code>apps/web/src/workspaceOverviewSelectors.ts:1–131</code>, <code>apps/web/src/store.ts:85–93</code></p>
-      <p><strong>Problem</strong>: <code>selectSidebarThreadsAcrossEnvironments</code> calls <code>Object.values(state.environments).flatMap(env =&gt; Object.values(env.sidebarThreadSummaryById))</code>. This selector is called independently in <code>selectOverviewStats</code>, <code>selectAttentionItems</code>, <code>selectActiveWorkThreads</code>, <code>selectRecentThreads</code>, and <code>selectHasThreads</code>. If a component subscribes to all five, it calls <code>flatMap</code> five times per render. <code>selectRecentThreads</code> additionally spreads and sorts the entire thread array on every invocation.</p>
-      <p><strong>Why it matters</strong>: During active AI turns, Zustand state updates are frequent (streaming message deltas). Redundant array flattening and sorting on each update causes unnecessary CPU overhead in the render loop, especially visible with dozens of active threads.</p>
-      <p><strong>Fix</strong>: Use <code>useMemo</code> or memoized selectors (via <code>zustand/shallow</code> or a selector library like <code>reselect</code>) to compute the flattened thread array once per state change. <code>selectRecentThreads</code> should receive a pre-computed thread list rather than calling <code>selectSidebarThreadsAcrossEnvironments</code> internally. Alternatively, move these derived computations into an Effect Atom so they update reactively and cache automatically.</p>
-      <p><strong>Risk</strong>: Low. Pure selector-layer change; no server-side risk. Verify no behavioral regression by running the existing selector tests.</p>
-    </div>
+        <!-- M2 -->
+        <div class="finding">
+          <h3>
+            <span class="badge medium">Medium</span> F4 —
+            <code>clearTurnStateForSession</code> scans all Effect cache keys
+          </h3>
+          <p>
+            <strong>Files</strong>:
+            <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:1105–1147</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: On <code>session.exited</code>,
+            <code>clearTurnStateForSession</code> calls
+            <code>Cache.keys(turnMessageIdsByTurnKey)</code>,
+            <code>Cache.keys(assistantSegmentStateByTurnKey)</code>, and
+            <code>Cache.keys(bufferedProposedPlanById)</code>, then filters by string prefix. With
+            capacities of 10,000–20,000 entries, this is an O(cache-size) scan on every session
+            exit. Sessions can exit frequently (provider restarts, interrupts, stops).
+          </p>
+          <p>
+            <strong>Why it matters</strong>: Under high concurrency (many threads across many
+            sessions), this can cause a measurable pause in the drainable worker every time a
+            provider session exits.
+          </p>
+          <p>
+            <strong>Fix</strong>: Maintain a
+            <code>Map&lt;ThreadId, Set&lt;string&gt;&gt;</code> (turn keys per thread) updated
+            eagerly whenever entries are added/removed from the caches. On session exit, use this
+            index to delete only the relevant keys. This reduces the cleanup from O(cache-size) to
+            O(active-keys-for-thread).
+          </p>
+          <p>
+            <strong>Risk</strong>: Low-medium. The index must be kept in sync with cache mutations.
+            Write a test verifying no key leaks after session cleanup.
+          </p>
+        </div>
 
-    <!-- L1 -->
-    <div class="finding">
-      <h3><span class="badge low">Low</span> F6 — <code>storeSelectors.ts</code> stub always returns <code>null</code></h3>
-      <p><strong>Files</strong>: <code>apps/web/src/storeSelectors.ts:6–11</code></p>
-      <p><strong>Problem</strong>: <code>createThreadSelectorAcrossEnvironments</code> is implemented as a stub that always returns <code>null</code>, regardless of the thread ID passed. Any component using this selector will never receive thread data. This is a reliability gap for any future consumer of per-thread detail in the web UI.</p>
-      <p><strong>Why it matters</strong>: Not immediately breaking if no component uses it yet, but it is a silent failure surface — a developer adding a feature that calls this selector will get no data and no error.</p>
-      <p><strong>Fix</strong>: Implement <code>createThreadSelectorAcrossEnvironments</code> to look up the thread by ID in <code>state.environments[envId].threadShellById</code> across all environments. Return the first match, or <code>null</code> if not found. Add a unit test asserting the selector returns a thread when one exists.</p>
-      <p><strong>Risk</strong>: Very low. The fix is additive; null-returning stub is currently harmless.</p>
-    </div>
+        <!-- M3 -->
+        <div class="finding">
+          <h3>
+            <span class="badge medium">Medium</span> F5 — Redundant Zustand selector work in web
+            client selectors
+          </h3>
+          <p>
+            <strong>Files</strong>: <code>apps/web/src/workspaceOverviewSelectors.ts:1–131</code>,
+            <code>apps/web/src/store.ts:85–93</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: <code>selectSidebarThreadsAcrossEnvironments</code> calls
+            <code
+              >Object.values(state.environments).flatMap(env =&gt;
+              Object.values(env.sidebarThreadSummaryById))</code
+            >. This selector is called independently in <code>selectOverviewStats</code>,
+            <code>selectAttentionItems</code>, <code>selectActiveWorkThreads</code>,
+            <code>selectRecentThreads</code>, and <code>selectHasThreads</code>. If a component
+            subscribes to all five, it calls <code>flatMap</code> five times per render.
+            <code>selectRecentThreads</code> additionally spreads and sorts the entire thread array
+            on every invocation.
+          </p>
+          <p>
+            <strong>Why it matters</strong>: During active AI turns, Zustand state updates are
+            frequent (streaming message deltas). Redundant array flattening and sorting on each
+            update causes unnecessary CPU overhead in the render loop, especially visible with
+            dozens of active threads.
+          </p>
+          <p>
+            <strong>Fix</strong>: Use <code>useMemo</code> or memoized selectors (via
+            <code>zustand/shallow</code> or a selector library like <code>reselect</code>) to
+            compute the flattened thread array once per state change.
+            <code>selectRecentThreads</code> should receive a pre-computed thread list rather than
+            calling <code>selectSidebarThreadsAcrossEnvironments</code> internally. Alternatively,
+            move these derived computations into an Effect Atom so they update reactively and cache
+            automatically.
+          </p>
+          <p>
+            <strong>Risk</strong>: Low. Pure selector-layer change; no server-side risk. Verify no
+            behavioral regression by running the existing selector tests.
+          </p>
+        </div>
 
-    <!-- L2 -->
-    <div class="finding">
-      <h3><span class="badge low">Low</span> F7 — <code>resolveModelForThread</code> and <code>resolveThreadDetail</code> do repeated SQLite reads per event</h3>
-      <p><strong>Files</strong>: <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:682–697</code></p>
-      <p><strong>Problem</strong>: <code>resolveModelForThread</code> calls <code>providerService.listSessions()</code> (in-memory scan) and <code>resolveThreadDetail</code> calls <code>projectionSnapshotQuery.getThreadDetailById</code> (SQLite read) on every invocation. These are called on <code>turn.completed</code> and can also be called multiple times within a single complex event via the lazy-loaded <code>getLoadedThreadDetail()</code> closure. While the closure memoizes within one event, two events processed back-to-back for the same thread will each re-read from SQLite.</p>
-      <p><strong>Why it matters</strong>: At very high event rates (fast streaming turns), this adds SQLite round-trips that accumulate. Lower priority than F1/F2 because the serial worker already limits concurrency and SQLite reads are fast for small tables.</p>
-      <p><strong>Fix</strong>: Add a short-lived (50–100ms) thread-shell cache in <code>ProviderRuntimeIngestion</code> keyed by <code>threadId</code>, separate from the existing Effect caches. The thread shell (status, session, active turn) changes infrequently relative to streaming deltas. Invalidate on any lifecycle event (<code>turn.started</code>, <code>turn.completed</code>, <code>session.exited</code>).</p>
-      <p><strong>Risk</strong>: Low-medium. Must invalidate the cache correctly to avoid stale reads on lifecycle events. Scope carefully.</p>
-    </div>
-  </section>
+        <!-- L1 -->
+        <div class="finding">
+          <h3>
+            <span class="badge low">Low</span> F6 — <code>storeSelectors.ts</code> stub always
+            returns <code>null</code>
+          </h3>
+          <p><strong>Files</strong>: <code>apps/web/src/storeSelectors.ts:6–11</code></p>
+          <p>
+            <strong>Problem</strong>: <code>createThreadSelectorAcrossEnvironments</code> is
+            implemented as a stub that always returns <code>null</code>, regardless of the thread ID
+            passed. Any component using this selector will never receive thread data. This is a
+            reliability gap for any future consumer of per-thread detail in the web UI.
+          </p>
+          <p>
+            <strong>Why it matters</strong>: Not immediately breaking if no component uses it yet,
+            but it is a silent failure surface — a developer adding a feature that calls this
+            selector will get no data and no error.
+          </p>
+          <p>
+            <strong>Fix</strong>: Implement <code>createThreadSelectorAcrossEnvironments</code> to
+            look up the thread by ID in
+            <code>state.environments[envId].threadShellById</code> across all environments. Return
+            the first match, or <code>null</code> if not found. Add a unit test asserting the
+            selector returns a thread when one exists.
+          </p>
+          <p>
+            <strong>Risk</strong>: Very low. The fix is additive; null-returning stub is currently
+            harmless.
+          </p>
+        </div>
 
-  <section aria-labelledby="recommendation">
-    <h2 id="recommendation">Recommendation</h2>
-    <p><strong>Do these now, in order:</strong></p>
-    <ol>
-      <li><strong>F2 (WAL mode)</strong> — One or two lines, zero risk, immediate throughput improvement for all SQLite workloads. Do this first.</li>
-      <li><strong>F3 (LIMIT on list queries)</strong> — Defensive hygiene before usage stats features ship. Low effort, high safety value.</li>
-      <li><strong>F5 (Zustand selector memoization)</strong> — Low effort, visible rendering improvement during active turns, no server risk.</li>
-      <li><strong>F6 (storeSelectors stub)</strong> — One-shot fix while the module is fresh.</li>
-      <li><strong>F1 (Map-based read model)</strong> — Higher effort, higher reward. Plan as a standalone PR with projector unit tests.</li>
-      <li><strong>F4 (cache-key index)</strong> — Schedule after F1; depends on understanding the cache structure.</li>
-      <li><strong>F7 (thread-shell micro-cache)</strong> — Defer until profiling confirms it is actually a bottleneck.</li>
-    </ol>
-    <p><strong>Do not touch yet:</strong> The provider adapter layer (OpenCode, Anthropic), the checkpoint reactor, or the authentication flow — no performance issues were found there and the risk of regression is high.</p>
-  </section>
+        <!-- L2 -->
+        <div class="finding">
+          <h3>
+            <span class="badge low">Low</span> F7 — <code>resolveModelForThread</code> and
+            <code>resolveThreadDetail</code> do repeated SQLite reads per event
+          </h3>
+          <p>
+            <strong>Files</strong>:
+            <code>apps/server/src/orchestration/Layers/ProviderRuntimeIngestion.ts:682–697</code>
+          </p>
+          <p>
+            <strong>Problem</strong>: <code>resolveModelForThread</code> calls
+            <code>providerService.listSessions()</code> (in-memory scan) and
+            <code>resolveThreadDetail</code> calls
+            <code>projectionSnapshotQuery.getThreadDetailById</code> (SQLite read) on every
+            invocation. These are called on <code>turn.completed</code> and can also be called
+            multiple times within a single complex event via the lazy-loaded
+            <code>getLoadedThreadDetail()</code> closure. While the closure memoizes within one
+            event, two events processed back-to-back for the same thread will each re-read from
+            SQLite.
+          </p>
+          <p>
+            <strong>Why it matters</strong>: At very high event rates (fast streaming turns), this
+            adds SQLite round-trips that accumulate. Lower priority than F1/F2 because the serial
+            worker already limits concurrency and SQLite reads are fast for small tables.
+          </p>
+          <p>
+            <strong>Fix</strong>: Add a short-lived (50–100ms) thread-shell cache in
+            <code>ProviderRuntimeIngestion</code> keyed by <code>threadId</code>, separate from the
+            existing Effect caches. The thread shell (status, session, active turn) changes
+            infrequently relative to streaming deltas. Invalidate on any lifecycle event
+            (<code>turn.started</code>, <code>turn.completed</code>, <code>session.exited</code>).
+          </p>
+          <p>
+            <strong>Risk</strong>: Low-medium. Must invalidate the cache correctly to avoid stale
+            reads on lifecycle events. Scope carefully.
+          </p>
+        </div>
+      </section>
 
-  <section aria-labelledby="scope">
-    <h2 id="scope">Scope</h2>
-    <h3>In Scope for First Execution Task (F2 + F3 + F5 + F6)</h3>
-    <ul>
-      <li>Add <code>PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;</code> in <code>NodeSqliteClient.ts</code> (or equivalent connection setup).</li>
-      <li>Add default <code>LIMIT 200</code> to <code>listTurnCostsByThreadId</code> and <code>listTurnCostsByProjectId</code>; update <code>TurnCostRepositoryShape</code>.</li>
-      <li>Memoize the result of <code>selectSidebarThreadsAcrossEnvironments</code> in <code>workspaceOverviewSelectors.ts</code> using <code>useMemo</code> or a memoized selector wrapper. Fix <code>selectRecentThreads</code> to accept a pre-computed thread list.</li>
-      <li>Implement <code>createThreadSelectorAcrossEnvironments</code> in <code>storeSelectors.ts</code>.</li>
-    </ul>
-    <h3>Out of Scope for First Task</h3>
-    <ul>
-      <li>Read-model Map refactor (F1) — separate PR, higher risk.</li>
-      <li>Cache-key index (F4) — depends on F1 shape decisions.</li>
-      <li>Thread-shell micro-cache (F7) — needs profiling data first.</li>
-      <li>Provider adapters, auth, checkpoint reactor, relay, terminal.</li>
-    </ul>
-  </section>
+      <section aria-labelledby="recommendation">
+        <h2 id="recommendation">Recommendation</h2>
+        <p><strong>Do these now, in order:</strong></p>
+        <ol>
+          <li>
+            <strong>F2 (WAL mode)</strong> — One or two lines, zero risk, immediate throughput
+            improvement for all SQLite workloads. Do this first.
+          </li>
+          <li>
+            <strong>F3 (LIMIT on list queries)</strong> — Defensive hygiene before usage stats
+            features ship. Low effort, high safety value.
+          </li>
+          <li>
+            <strong>F5 (Zustand selector memoization)</strong> — Low effort, visible rendering
+            improvement during active turns, no server risk.
+          </li>
+          <li>
+            <strong>F6 (storeSelectors stub)</strong> — One-shot fix while the module is fresh.
+          </li>
+          <li>
+            <strong>F1 (Map-based read model)</strong> — Higher effort, higher reward. Plan as a
+            standalone PR with projector unit tests.
+          </li>
+          <li>
+            <strong>F4 (cache-key index)</strong> — Schedule after F1; depends on understanding the
+            cache structure.
+          </li>
+          <li>
+            <strong>F7 (thread-shell micro-cache)</strong> — Defer until profiling confirms it is
+            actually a bottleneck.
+          </li>
+        </ol>
+        <p>
+          <strong>Do not touch yet:</strong> The provider adapter layer (OpenCode, Anthropic), the
+          checkpoint reactor, or the authentication flow — no performance issues were found there
+          and the risk of regression is high.
+        </p>
+      </section>
 
-  <section aria-labelledby="files-to-inspect">
-    <h2 id="files-to-inspect">Files to Inspect Before Editing</h2>
-    <ul>
-      <li><code>apps/server/src/persistence/NodeSqliteClient.ts</code> — confirm connection setup; look for existing pragma calls.</li>
-      <li><code>apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts</code> — check for any WAL pragma already present.</li>
-      <li><code>apps/server/src/persistence/Layers/TurnCosts.ts:56–107</code> — list query implementations.</li>
-      <li><code>apps/server/src/persistence/Services/TurnCosts.ts</code> — <code>TurnCostRepositoryShape</code> interface.</li>
-      <li><code>apps/web/src/workspaceOverviewSelectors.ts</code> — all five selector functions.</li>
-      <li><code>apps/web/src/store.ts:85–93</code> — <code>selectSidebarThreadsAcrossEnvironments</code> implementation.</li>
-      <li><code>apps/web/src/storeSelectors.ts</code> — stub implementation.</li>
-      <li>All callers of <code>listByThreadId</code> and <code>listByProjectId</code> in <code>apps/server/src/</code> — verify none expects unbounded results.</li>
-    </ul>
-  </section>
+      <section aria-labelledby="scope">
+        <h2 id="scope">Scope</h2>
+        <h3>In Scope for First Execution Task (F2 + F3 + F5 + F6)</h3>
+        <ul>
+          <li>
+            Add <code>PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;</code> in
+            <code>NodeSqliteClient.ts</code> (or equivalent connection setup).
+          </li>
+          <li>
+            Add default <code>LIMIT 200</code> to <code>listTurnCostsByThreadId</code> and
+            <code>listTurnCostsByProjectId</code>; update <code>TurnCostRepositoryShape</code>.
+          </li>
+          <li>
+            Memoize the result of <code>selectSidebarThreadsAcrossEnvironments</code> in
+            <code>workspaceOverviewSelectors.ts</code> using <code>useMemo</code> or a memoized
+            selector wrapper. Fix <code>selectRecentThreads</code> to accept a pre-computed thread
+            list.
+          </li>
+          <li>
+            Implement <code>createThreadSelectorAcrossEnvironments</code> in
+            <code>storeSelectors.ts</code>.
+          </li>
+        </ul>
+        <h3>Out of Scope for First Task</h3>
+        <ul>
+          <li>Read-model Map refactor (F1) — separate PR, higher risk.</li>
+          <li>Cache-key index (F4) — depends on F1 shape decisions.</li>
+          <li>Thread-shell micro-cache (F7) — needs profiling data first.</li>
+          <li>Provider adapters, auth, checkpoint reactor, relay, terminal.</li>
+        </ul>
+      </section>
 
-  <section aria-labelledby="acceptance-criteria">
-    <h2 id="acceptance-criteria">Acceptance Criteria</h2>
-    <ol>
-      <li><code>PRAGMA journal_mode</code> returns <code>wal</code> when queried on the running server SQLite database.</li>
-      <li><code>listByThreadId</code> and <code>listByProjectId</code> accept a <code>limit</code> option and default to at most 200 rows.</li>
-      <li><code>selectSidebarThreadsAcrossEnvironments</code> is only computed once per render cycle when multiple overview selectors are used together.</li>
-      <li><code>createThreadSelectorAcrossEnvironments("some-thread-id")</code> returns the matching thread shell when that thread exists in state.</li>
-      <li><code>pnpm typecheck</code> passes with no new errors.</li>
-      <li>Existing tests in <code>apps/server/src</code> and <code>apps/web/src</code> pass without modification.</li>
-    </ol>
-  </section>
+      <section aria-labelledby="files-to-inspect">
+        <h2 id="files-to-inspect">Files to Inspect Before Editing</h2>
+        <ul>
+          <li>
+            <code>apps/server/src/persistence/NodeSqliteClient.ts</code> — confirm connection setup;
+            look for existing pragma calls.
+          </li>
+          <li>
+            <code>apps/server/src/persistence/Migrations/001_OrchestrationEvents.ts</code> — check
+            for any WAL pragma already present.
+          </li>
+          <li>
+            <code>apps/server/src/persistence/Layers/TurnCosts.ts:56–107</code> — list query
+            implementations.
+          </li>
+          <li>
+            <code>apps/server/src/persistence/Services/TurnCosts.ts</code> —
+            <code>TurnCostRepositoryShape</code> interface.
+          </li>
+          <li>
+            <code>apps/web/src/workspaceOverviewSelectors.ts</code> — all five selector functions.
+          </li>
+          <li>
+            <code>apps/web/src/store.ts:85–93</code> —
+            <code>selectSidebarThreadsAcrossEnvironments</code> implementation.
+          </li>
+          <li><code>apps/web/src/storeSelectors.ts</code> — stub implementation.</li>
+          <li>
+            All callers of <code>listByThreadId</code> and <code>listByProjectId</code> in
+            <code>apps/server/src/</code> — verify none expects unbounded results.
+          </li>
+        </ul>
+      </section>
 
-  <section aria-labelledby="risks">
-    <h2 id="risks">Risks and Notes</h2>
-    <ul>
-      <li><strong>WAL mode</strong>: WAL requires the database file and WAL file to be on the same volume. Always true here but worth documenting. If the server is run on a read-only filesystem (unlikely, but possible in some CI setups), WAL will fail to activate. Guard with a warning log rather than a crash.</li>
-      <li><strong>LIMIT on list queries</strong>: Any existing usage statistics UI that calls the list queries expecting complete history will now silently truncate. Audit all consumers of <code>listByThreadId</code>/<code>listByProjectId</code> before the change lands. The aggregate queries are unaffected.</li>
-      <li><strong>Selector memoization</strong>: React hook memoization (<code>useMemo</code>) only works inside components. Pure selector functions called outside React must use a library like <code>reselect</code>. Verify that <code>workspaceOverviewSelectors.ts</code> functions are only used inside React components before applying <code>useMemo</code>.</li>
-      <li><strong>Read-model Map refactor (F1 — deferred)</strong>: When this is eventually executed, the projection replay bootstrap must correctly rebuild the Map from persisted events. Snapshot serialization/deserialization must convert Map ↔ Array. This is the riskiest change and should have a dedicated PR with 100% projector coverage before merging.</li>
-    </ul>
-  </section>
+      <section aria-labelledby="acceptance-criteria">
+        <h2 id="acceptance-criteria">Acceptance Criteria</h2>
+        <ol>
+          <li>
+            <code>PRAGMA journal_mode</code> returns <code>wal</code> when queried on the running
+            server SQLite database.
+          </li>
+          <li>
+            <code>listByThreadId</code> and <code>listByProjectId</code> accept a
+            <code>limit</code> option and default to at most 200 rows.
+          </li>
+          <li>
+            <code>selectSidebarThreadsAcrossEnvironments</code> is only computed once per render
+            cycle when multiple overview selectors are used together.
+          </li>
+          <li>
+            <code>createThreadSelectorAcrossEnvironments("some-thread-id")</code> returns the
+            matching thread shell when that thread exists in state.
+          </li>
+          <li><code>pnpm typecheck</code> passes with no new errors.</li>
+          <li>
+            Existing tests in <code>apps/server/src</code> and <code>apps/web/src</code> pass
+            without modification.
+          </li>
+        </ol>
+      </section>
 
-  <section aria-labelledby="sequencing">
-    <h2 id="sequencing">Recommended Execution Sequence</h2>
-    <div class="sequence">
-      <p><strong>Task 1 (low-risk, do now):</strong> WAL mode + LIMIT on list queries + storeSelectors stub fix</p>
-      <p><strong>Task 2 (medium-risk, do next):</strong> Zustand selector memoization</p>
-      <p><strong>Task 3 (high-risk, plan separately):</strong> Map-based read model (F1)</p>
-      <p><strong>Defer:</strong> Cache-key index (F4), thread-shell micro-cache (F7)</p>
-    </div>
-  </section>
-</main>
-</body>
+      <section aria-labelledby="risks">
+        <h2 id="risks">Risks and Notes</h2>
+        <ul>
+          <li>
+            <strong>WAL mode</strong>: WAL requires the database file and WAL file to be on the same
+            volume. Always true here but worth documenting. If the server is run on a read-only
+            filesystem (unlikely, but possible in some CI setups), WAL will fail to activate. Guard
+            with a warning log rather than a crash.
+          </li>
+          <li>
+            <strong>LIMIT on list queries</strong>: Any existing usage statistics UI that calls the
+            list queries expecting complete history will now silently truncate. Audit all consumers
+            of <code>listByThreadId</code>/<code>listByProjectId</code> before the change lands. The
+            aggregate queries are unaffected.
+          </li>
+          <li>
+            <strong>Selector memoization</strong>: React hook memoization (<code>useMemo</code>)
+            only works inside components. Pure selector functions called outside React must use a
+            library like <code>reselect</code>. Verify that
+            <code>workspaceOverviewSelectors.ts</code> functions are only used inside React
+            components before applying <code>useMemo</code>.
+          </li>
+          <li>
+            <strong>Read-model Map refactor (F1 — deferred)</strong>: When this is eventually
+            executed, the projection replay bootstrap must correctly rebuild the Map from persisted
+            events. Snapshot serialization/deserialization must convert Map ↔ Array. This is the
+            riskiest change and should have a dedicated PR with 100% projector coverage before
+            merging.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="sequencing">
+        <h2 id="sequencing">Recommended Execution Sequence</h2>
+        <div class="sequence">
+          <p>
+            <strong>Task 1 (low-risk, do now):</strong> WAL mode + LIMIT on list queries +
+            storeSelectors stub fix
+          </p>
+          <p><strong>Task 2 (medium-risk, do next):</strong> Zustand selector memoization</p>
+          <p><strong>Task 3 (high-risk, plan separately):</strong> Map-based read model (F1)</p>
+          <p><strong>Defer:</strong> Cache-key index (F4), thread-shell micro-cache (F7)</p>
+        </div>
+      </section>
+    </main>
+  </body>
 </html>

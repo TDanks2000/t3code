@@ -19,6 +19,7 @@ Each entry is a self-contained plan, audit, or investigation an agent can execut
 ## Artifacts
 
 <!-- newest first; one line per run -->
+
 - 2026-06-25 · plan · [browser-mcp-agent-capabilities](plans/2026-06-25-browser-mcp-agent-capabilities/plan.html) — add hover, select, double/right-click, and multi-tab tools to MCP browser toolkit
 
 - 2026-06-25 · audit · [speed-reliability-performance](audits/2026-06-25-speed-reliability-performance/audit.html) — 7 findings: WAL mode, O(N) read-model scans, unbounded SQL lists, selector memoization, cache-key scans

@@ -2062,7 +2062,13 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     }
     const moveSequence = yield* nextCounter(pointerSequenceRef);
     const moveCreatedAt = yield* currentIso;
-    yield* emitPointerEvent({ tabId, phase: "move", ...point, sequence: moveSequence, createdAt: moveCreatedAt });
+    yield* emitPointerEvent({
+      tabId,
+      phase: "move",
+      ...point,
+      sequence: moveSequence,
+      createdAt: moveCreatedAt,
+    });
     yield* Effect.sleep(AGENT_CURSOR_MOVE_MS);
     yield* send("Input.dispatchMouseEvent", {
       type: "mouseMoved",

@@ -33,8 +33,8 @@ You are implementing **Task 1** of the Speed, Reliability & Performance audit fo
    ```
    In Effect-sql, this looks like:
    ```ts
-   yield* sql`PRAGMA journal_mode=WAL`;
-   yield* sql`PRAGMA synchronous=NORMAL`;
+   yield * sql`PRAGMA journal_mode=WAL`;
+   yield * sql`PRAGMA synchronous=NORMAL`;
    ```
 4. If there is already a WAL pragma, confirm it and skip this fix.
 5. If a migration would be cleaner (e.g., the connection setup doesn't easily allow pragmas), add it as `apps/server/src/persistence/Migrations/034_WalMode.ts` following the pattern of sibling migrations.
@@ -111,7 +111,7 @@ You are implementing **Task 1** of the Speed, Reliability & Performance audit fo
    ```ts
    const threads = useMemo(
      () => selectSidebarThreadsAcrossEnvironments(state),
-     [state.environments]
+     [state.environments],
    );
    const stats = selectOverviewStats(threads);
    const items = selectAttentionItems(threads);

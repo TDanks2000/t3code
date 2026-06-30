@@ -205,16 +205,22 @@ export const PreviewAutomationHoverInput = Schema.Struct({
     description: "Playwright selector for the hover target.",
   }),
   x: Schema.optional(
-    Schema.Finite.annotate({ description: "Viewport-relative X coordinate in CSS pixels. Must be paired with y." }),
+    Schema.Finite.annotate({
+      description: "Viewport-relative X coordinate in CSS pixels. Must be paired with y.",
+    }),
   ),
   y: Schema.optional(
-    Schema.Finite.annotate({ description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x." }),
+    Schema.Finite.annotate({
+      description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x.",
+    }),
   ),
   dwellMs: Schema.optional(
-    Schema.Int
-      .check(Schema.isGreaterThanOrEqualTo(0))
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
       .check(Schema.isLessThanOrEqualTo(2_000))
-      .annotate({ description: "Milliseconds to hold the hover. Defaults to 300. Increase for slow tooltip animations." }),
+      .annotate({
+        description:
+          "Milliseconds to hold the hover. Defaults to 300. Increase for slow tooltip animations.",
+      }),
   ),
 })
   .check(
@@ -246,13 +252,14 @@ export const PreviewAutomationSelectInput = Schema.Struct({
   ),
   label: Schema.optional(
     Schema.String.annotate({
-      description: "Visible option text to select. Case-sensitive substring match after trimming whitespace.",
+      description:
+        "Visible option text to select. Case-sensitive substring match after trimming whitespace.",
     }),
   ),
   index: Schema.optional(
-    Schema.Int
-      .check(Schema.isGreaterThanOrEqualTo(0))
-      .annotate({ description: "Zero-based option index." }),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+      description: "Zero-based option index.",
+    }),
   ),
   timeoutMs: OptionalTimeoutMs,
 })

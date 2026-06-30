@@ -408,7 +408,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     }
   }
 
-  const inventoryExit = yield* Effect.exit(
+  const loadInventory = () =>
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* openCodeRuntime.connectToOpenCodeServer({
@@ -430,6 +430,11 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           (cause) => new OpenCodeProbeError({ cause, detail: openCodeRuntimeErrorDetail(cause) }),
         ),
       ),
+    );
+
+  const inventoryExit = yield* Effect.exit(
+    loadInventory().pipe(
+      Effect.retry({ times: 1 }),
     ),
   );
   if (inventoryExit._tag === "Failure") {

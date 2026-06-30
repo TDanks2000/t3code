@@ -224,8 +224,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
 }) {
   const skillSourceLabel =
     props.item.type === "skill" ? formatProviderSkillInstallSource(props.item.skill) : null;
-  const skillScope =
-    props.item.type === "skill" ? (props.item.skill.scope ?? null) : null;
+  const skillScope = props.item.type === "skill" ? (props.item.skill.scope ?? null) : null;
 
   const itemContent = (
     <CommandItem

@@ -76,7 +76,9 @@ export function IdeTerminalPanel({ environmentId, workspaceRoot }: IdeTerminalPa
   const setTerminalOpen = useTerminalUiStateStore((state) => state.setTerminalOpen);
   const setTerminalHeight = useTerminalUiStateStore((state) => state.setTerminalHeight);
   const splitTerminalInStore = useTerminalUiStateStore((state) => state.splitTerminal);
-  const splitTerminalVerticalInStore = useTerminalUiStateStore((state) => state.splitTerminalVertical);
+  const splitTerminalVerticalInStore = useTerminalUiStateStore(
+    (state) => state.splitTerminalVertical,
+  );
   const newTerminalInStore = useTerminalUiStateStore((state) => state.newTerminal);
   const setActiveTerminal = useTerminalUiStateStore((state) => state.setActiveTerminal);
   const closeTerminalInStore = useTerminalUiStateStore((state) => state.closeTerminal);

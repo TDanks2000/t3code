@@ -1587,10 +1587,7 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
 }
 
 /** Resolves the fetchable URL for a work-entry image preview by source kind. */
-function workEntryImagePreviewSrc(
-  preview: WorkEntryImagePreview,
-  httpBaseUrl: string,
-): string {
+function workEntryImagePreviewSrc(preview: WorkEntryImagePreview, httpBaseUrl: string): string {
   return preview.kind === "server_path"
     ? `${httpBaseUrl}${preview.src}`
     : `${httpBaseUrl}${workspaceFilePreviewRoutePath(preview.path)}`;

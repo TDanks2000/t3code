@@ -1647,8 +1647,8 @@ export function makeOpenCodeAdapter(
             threadId,
           });
         }
-        const stopped = yield* stopOpenCodeContext(context);
         sessions.delete(threadId);
+        const stopped = yield* stopOpenCodeContext(context);
         if (!stopped) {
           return;
         }

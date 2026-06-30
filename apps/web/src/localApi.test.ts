@@ -142,7 +142,6 @@ vi.mock("./environments/runtime", () => ({
   subscribeEnvironmentConnections: vi.fn(() => () => undefined),
 }));
 
-
 vi.mock("./contextMenuFallback", () => ({
   showContextMenuFallback: showContextMenuFallbackMock,
 }));

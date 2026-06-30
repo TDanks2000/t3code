@@ -113,7 +113,7 @@ function DesignRoute() {
     const messages = thread?.messages ?? [];
     const assistantMsg = assistantMessageId
       ? messages.find((m) => m.id === assistantMessageId)
-      : [...messages].reverse().find((m) => m.role === "assistant" && !m.streaming);
+      : [...messages].toReversed().find((m) => m.role === "assistant" && !m.streaming);
 
     if (!assistantMsg) {
       setState((prev) =>
@@ -125,7 +125,7 @@ function DesignRoute() {
       return;
     }
 
-    const match = assistantMsg.text.match(/ARTIFACT:\s*([\w./\-]+\.html)/);
+    const match = assistantMsg.text.match(/ARTIFACT:\s*([\w./-]+\.html)/);
 
     if (!match?.[1]) {
       setState((prev) =>

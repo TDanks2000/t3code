@@ -317,13 +317,13 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
       Effect.gen(function* () {
         if (ctx.stopped) return;
         ctx.stopped = true;
+        sessions.delete(ctx.threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
         yield* Effect.ignoreCause({ log: true })(Scope.close(ctx.scope, Exit.void));
-        sessions.delete(ctx.threadId);
         yield* offerRuntimeEvent({
           type: "session.exited",
           ...(yield* makeEventStamp()),

@@ -34,11 +34,24 @@ Every new operation requires changes across 6 files. Follow all 7 steps below se
 
 ```ts
 export const PreviewAutomationOperation = Schema.Literals([
-  "status", "open", "navigate", "snapshot",
-  "click", "type", "press", "scroll", "evaluate", "waitFor",
-  "recordingStart", "recordingStop",
+  "status",
+  "open",
+  "navigate",
+  "snapshot",
+  "click",
+  "type",
+  "press",
+  "scroll",
+  "evaluate",
+  "waitFor",
+  "recordingStart",
+  "recordingStop",
   // ADD:
-  "hover", "select", "tabList", "tabSwitch", "tabClose",
+  "hover",
+  "select",
+  "tabList",
+  "tabSwitch",
+  "tabClose",
 ]);
 ```
 
@@ -74,16 +87,22 @@ export const PreviewAutomationHoverInput = Schema.Struct({
     description: "Playwright selector for the hover target.",
   }),
   x: Schema.optional(
-    Schema.Finite.annotate({ description: "Viewport-relative X coordinate in CSS pixels. Must be paired with y." }),
+    Schema.Finite.annotate({
+      description: "Viewport-relative X coordinate in CSS pixels. Must be paired with y.",
+    }),
   ),
   y: Schema.optional(
-    Schema.Finite.annotate({ description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x." }),
+    Schema.Finite.annotate({
+      description: "Viewport-relative Y coordinate in CSS pixels. Must be paired with x.",
+    }),
   ),
   dwellMs: Schema.optional(
-    Schema.Int
-      .check(Schema.isGreaterThanOrEqualTo(0))
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
       .check(Schema.isLessThanOrEqualTo(2_000))
-      .annotate({ description: "Milliseconds to hold the hover. Defaults to 300. Increase for slow tooltip animations." }),
+      .annotate({
+        description:
+          "Milliseconds to hold the hover. Defaults to 300. Increase for slow tooltip animations.",
+      }),
   ),
 })
   .check(
@@ -119,13 +138,14 @@ export const PreviewAutomationSelectInput = Schema.Struct({
   ),
   label: Schema.optional(
     Schema.String.annotate({
-      description: "Visible option text to select. Case-sensitive substring match after trimming whitespace.",
+      description:
+        "Visible option text to select. Case-sensitive substring match after trimming whitespace.",
     }),
   ),
   index: Schema.optional(
-    Schema.Int
-      .check(Schema.isGreaterThanOrEqualTo(0))
-      .annotate({ description: "Zero-based option index." }),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+      description: "Zero-based option index.",
+    }),
   ),
   timeoutMs: OptionalTimeoutMs,
 })
@@ -336,12 +356,14 @@ case "tabClose": {
 Tab operations (tabList, tabSwitch, tabClose) are handled entirely in the renderer — no new IPC needed for those.
 
 1. Add two new channel constants wherever the other `PREVIEW_AUTOMATION_*_CHANNEL` strings live:
+
    ```ts
    PREVIEW_AUTOMATION_HOVER_CHANNEL: "preview:automation:hover",
    PREVIEW_AUTOMATION_SELECT_CHANNEL: "preview:automation:select",
    ```
 
 2. Define payload schemas following the pattern of `DesktopPreviewAutomationClickInputSchema`:
+
    ```ts
    const DesktopPreviewAutomationHoverInputSchema = Schema.Struct({
      tabId: Schema.String,
@@ -354,6 +376,7 @@ Tab operations (tabList, tabSwitch, tabClose) are handled entirely in the render
    ```
 
 3. Add IPC methods:
+
    ```ts
    export const automationHover = DesktopIpc.makeIpcMethod({
      channel: IpcChannels.PREVIEW_AUTOMATION_HOVER_CHANNEL,
@@ -398,34 +421,43 @@ Locate the two `Input.dispatchMouseEvent` calls in `performAutomationClick` (aro
 const button = (input as { button?: string }).button ?? "left";
 const clickCount = (input as { clickCount?: number }).clickCount ?? 1;
 
-yield* expectAgentInput(tabId, { kind: "pointer", ...point, button: button === "left" ? 0 : button === "right" ? 2 : 1 });
+yield *
+  expectAgentInput(tabId, {
+    kind: "pointer",
+    ...point,
+    button: button === "left" ? 0 : button === "right" ? 2 : 1,
+  });
 
-yield* send("Input.dispatchMouseEvent", {
-  type: "mousePressed",
-  ...point,
-  button,
-  clickCount,
-});
-yield* send("Input.dispatchMouseEvent", {
-  type: "mouseReleased",
-  ...point,
-  button,
-  clickCount,
-});
-// For double-click, send a second press+release
-if (clickCount === 2) {
-  yield* send("Input.dispatchMouseEvent", {
+yield *
+  send("Input.dispatchMouseEvent", {
     type: "mousePressed",
     ...point,
     button,
     clickCount,
   });
-  yield* send("Input.dispatchMouseEvent", {
+yield *
+  send("Input.dispatchMouseEvent", {
     type: "mouseReleased",
     ...point,
     button,
     clickCount,
   });
+// For double-click, send a second press+release
+if (clickCount === 2) {
+  yield *
+    send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      ...point,
+      button,
+      clickCount,
+    });
+  yield *
+    send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      ...point,
+      button,
+      clickCount,
+    });
 }
 ```
 
@@ -465,7 +497,13 @@ const performAutomationHover = Effect.fn("PreviewManager.performAutomationHover"
   // Animate cursor move
   const moveSequence = yield* nextCounter(pointerSequenceRef);
   const moveCreatedAt = yield* currentIso;
-  yield* emitPointerEvent({ tabId, phase: "move", ...point, sequence: moveSequence, createdAt: moveCreatedAt });
+  yield* emitPointerEvent({
+    tabId,
+    phase: "move",
+    ...point,
+    sequence: moveSequence,
+    createdAt: moveCreatedAt,
+  });
   yield* Effect.sleep(AGENT_CURSOR_MOVE_MS);
   // Dispatch mouse move to trigger :hover
   yield* send("Input.dispatchMouseEvent", {
@@ -579,6 +617,7 @@ Handle the result discriminants the same way `performAutomationScroll` does — 
 **File**: `apps/desktop/src/preview/Manager.ts`
 
 1. In the `PreviewManager` service interface (around line 2650), add:
+
    ```ts
    readonly automationHover: (
      tabId: string,
@@ -591,6 +630,7 @@ Handle the result discriminants the same way `performAutomationScroll` does — 
    ```
 
 2. In the `PreviewManager.of({ ... })` call at the bottom of `make`, add:
+
    ```ts
    automationHover: operations.automationHover,
    automationSelect: operations.automationSelect,
@@ -603,6 +643,7 @@ Handle the result discriminants the same way `performAutomationScroll` does — 
 ## Validation checklist
 
 Run after implementation:
+
 - [ ] `pnpm tsc --noEmit` — no new type errors. The new operation literals in `PreviewAutomationOperation` will surface any switch branches that need updating.
 - [ ] `pnpm test` in `apps/server` and `apps/desktop` — no regressions
 - [ ] Manual: hover over a tooltip trigger → snapshot shows tooltip visible

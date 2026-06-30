@@ -69,6 +69,7 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "opencode-ai",
   homebrewFormula: "anomalyco/tap/opencode",
+  repository: "anomalyco/opencode-ai",
   nativeUpdate: {
     executable: "opencode",
     args: ["upgrade"],

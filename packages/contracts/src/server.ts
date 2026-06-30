@@ -138,6 +138,7 @@ export const ServerProviderVersionAdvisory = Schema.Struct({
   canUpdate: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   checkedAt: Schema.NullOr(IsoDateTime),
   message: Schema.NullOr(TrimmedNonEmptyString),
+  changelogUrl: Schema.NullOr(Schema.String),
 });
 export type ServerProviderVersionAdvisory = typeof ServerProviderVersionAdvisory.Type;
 

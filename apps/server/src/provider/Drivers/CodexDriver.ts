@@ -65,6 +65,7 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "@openai/codex",
   homebrewFormula: "codex",
+  repository: "openai/codex",
   nativeUpdate: null,
 });
 

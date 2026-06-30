@@ -696,6 +696,34 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          title="Auto-update on startup"
+          description="Automatically check for and install provider CLI updates when the app starts."
+          resetAction={
+            settings.autoUpdateProvidersOnStartup !==
+            DEFAULT_UNIFIED_SETTINGS.autoUpdateProvidersOnStartup ? (
+              <SettingResetButton
+                label="auto-update on startup"
+                onClick={() =>
+                  updateSettings({
+                    autoUpdateProvidersOnStartup:
+                      DEFAULT_UNIFIED_SETTINGS.autoUpdateProvidersOnStartup,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoUpdateProvidersOnStartup}
+              onCheckedChange={(checked) =>
+                updateSettings({ autoUpdateProvidersOnStartup: Boolean(checked) })
+              }
+              aria-label="Auto-update providers on startup"
+            />
+          }
+        />
+
+        <SettingsRow
           title="Auto-open task panel"
           description="Open the right-side plan and task panel automatically when steps appear."
           resetAction={

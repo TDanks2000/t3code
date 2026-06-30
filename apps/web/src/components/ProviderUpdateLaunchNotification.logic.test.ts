@@ -57,6 +57,7 @@ function provider(input: {
       canUpdate: input.canUpdate ?? true,
       checkedAt,
       message: "Update available.",
+      changelogUrl: null,
     },
   };
 

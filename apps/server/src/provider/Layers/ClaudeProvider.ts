@@ -22,6 +22,7 @@ import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { compareSemverVersions } from "@t3tools/shared/semver";
 import {
   query as claudeQuery,
+  type ModelInfo as ClaudeAgentModelInfo,
   type SlashCommand as ClaudeSlashCommand,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -458,6 +459,7 @@ type ClaudeCapabilitiesProbe = {
   readonly subscriptionType: string | undefined;
   readonly tokenSource: string | undefined;
   readonly slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
+  readonly models: ReadonlyArray<ServerProviderModel>;
 };
 
 function parseClaudeInitializationCommands(
@@ -532,6 +534,84 @@ function waitForAbortSignal(signal: AbortSignal): Promise<void> {
   });
 }
 
+function claudeModelsFromSdkInfo(
+  models: ReadonlyArray<ClaudeAgentModelInfo>,
+): ReadonlyArray<ServerProviderModel> {
+  return models.map((m) => {
+    const optionDescriptors = [];
+
+    if (m.supportsEffort && m.supportedEffortLevels && m.supportedEffortLevels.length > 0) {
+      optionDescriptors.push(
+        buildSelectOptionDescriptor({
+          id: "effort",
+          label: "Reasoning",
+          options: m.supportedEffortLevels.map((level) => ({
+            value: level,
+            label: level.charAt(0).toUpperCase() + level.slice(1),
+            isDefault: level === "high",
+          })),
+        }),
+      );
+    }
+
+    if (m.supportsFastMode) {
+      optionDescriptors.push(
+        buildBooleanOptionDescriptor({
+          id: "fastMode",
+          label: "Fast Mode",
+        }),
+      );
+    }
+
+    if (m.supportsAdaptiveThinking) {
+      optionDescriptors.push(
+        buildBooleanOptionDescriptor({
+          id: "thinking",
+          label: "Thinking",
+        }),
+      );
+    }
+
+    if (m.supportsAutoMode) {
+      optionDescriptors.push(
+        buildBooleanOptionDescriptor({
+          id: "autoMode",
+          label: "Auto Mode",
+        }),
+      );
+    }
+
+    if (m.supportsEffort && !m.supportsAdaptiveThinking) {
+      const hasContextWindow = BUILT_IN_MODELS.some(
+        (bim) =>
+          bim.slug === m.value &&
+          bim.capabilities?.optionDescriptors?.some((d) => d.id === "contextWindow"),
+      );
+      if (hasContextWindow) {
+        optionDescriptors.push(
+          buildSelectOptionDescriptor({
+            id: "contextWindow",
+            label: "Context Window",
+            options: [
+              { value: "200k", label: "200k", isDefault: true },
+              { value: "1m", label: "1M" },
+            ],
+          }),
+        );
+      }
+    }
+
+    return {
+      slug: m.value,
+      name: m.displayName,
+      isCustom: false,
+      capabilities: createModelCapabilities({
+        optionDescriptors,
+      }),
+    } satisfies ServerProviderModel;
+  });
+}
+
 /**
  * Probe account information by spawning a lightweight Claude Agent SDK
  * session and reading the initialization result.
@@ -583,6 +663,7 @@ const probeClaudeCapabilities = (
         subscriptionType: account?.subscriptionType,
         tokenSource: account?.tokenSource,
         slashCommands: parseClaudeInitializationCommands(init.commands),
+        models: claudeModelsFromSdkInfo(init.models),
       } satisfies ClaudeCapabilitiesProbe;
     });
   }).pipe(
@@ -720,23 +801,31 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
+  const capabilities = resolveCapabilities
+    ? yield* resolveCapabilities(claudeSettings).pipe(Effect.orElseSucceed(() => undefined))
+    : undefined;
+
+  const isUsingSdkModels = capabilities?.models && capabilities.models.length > 0;
+  const baseBuiltInModels: ReadonlyArray<ServerProviderModel> = isUsingSdkModels
+    ? capabilities.models
+    : getBuiltInClaudeModelsForVersion(parsedVersion);
+
   const models = providerModelsFromSettings(
-    getBuiltInClaudeModelsForVersion(parsedVersion),
+    baseBuiltInModels,
     PROVIDER,
     claudeSettings.customModels,
     DEFAULT_CLAUDE_MODEL_CAPABILITIES,
   );
-  const versionUpgradeMessage = supportsClaudeFable5(parsedVersion)
-    ? undefined
-    : supportsClaudeOpus48(parsedVersion)
-      ? formatClaudeFable5UpgradeMessage(parsedVersion)
-      : supportsClaudeOpus47(parsedVersion)
-        ? formatClaudeOpus48UpgradeMessage(parsedVersion)
-        : formatClaudeOpus47UpgradeMessage(parsedVersion);
 
-  const capabilities = resolveCapabilities
-    ? yield* resolveCapabilities(claudeSettings).pipe(Effect.orElseSucceed(() => undefined))
-    : undefined;
+  const versionUpgradeMessage =
+    !isUsingSdkModels && !supportsClaudeFable5(parsedVersion)
+      ? supportsClaudeOpus48(parsedVersion)
+        ? formatClaudeFable5UpgradeMessage(parsedVersion)
+        : supportsClaudeOpus47(parsedVersion)
+          ? formatClaudeOpus48UpgradeMessage(parsedVersion)
+          : formatClaudeOpus47UpgradeMessage(parsedVersion)
+      : undefined;
+
   const slashCommands = capabilities?.slashCommands ?? [];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
 

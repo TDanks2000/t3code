@@ -8,13 +8,27 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { ErrorBoundaryFatal } from "../components/ErrorBoundary";
+import { ProviderAutoUpdateOverlay } from "../components/ProviderAutoUpdateOverlay";
+import {
+  type ProviderAutoUpdatePhase,
+  collectAutoUpdateSessionState,
+  allUpdatesTerminal,
+} from "../components/ProviderAutoUpdateOverlay.logic";
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
@@ -27,7 +41,7 @@ import {
   toastManager,
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, usePrimarySettings } from "../hooks/useSettings";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -45,13 +59,130 @@ import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerConfigEventAtom,
+  primaryServerProvidersAtom,
   primaryServerWelcomeAtom,
+  serverEnvironment,
 } from "../state/server";
 import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
 import {
   createKeybindingsUpdateToastController,
   type KeybindingsUpdateToastController,
 } from "../components/KeybindingsUpdateToast.logic";
+
+const AUTO_UPDATE_RAN = "t3code:auto-update-ran";
+const autoUpdateSessionRef = { current: false };
+
+function useAutoUpdateHasRan(): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      const handler = () => onStoreChange();
+      window.addEventListener("storage", handler);
+      return () => window.removeEventListener("storage", handler);
+    },
+    () => localStorage.getItem(AUTO_UPDATE_RAN) === "true",
+    () => false,
+  );
+}
+
+function useAutoUpdatePhase(): {
+  phase: ProviderAutoUpdatePhase;
+  setPhase: (phase: ProviderAutoUpdatePhase) => void;
+} {
+  const sessionStorageKey = "t3code:auto-update-in-progress";
+  const [phase, setPhaseState] = useState<ProviderAutoUpdatePhase>(() => {
+    if (sessionStorage.getItem(sessionStorageKey)) {
+      return "updating";
+    }
+    return "checking";
+  });
+
+  const setPhase = useCallback((next: ProviderAutoUpdatePhase) => {
+    setPhaseState(next);
+    if (next === "updating") {
+      sessionStorage.setItem(sessionStorageKey, "true");
+    } else {
+      sessionStorage.removeItem(sessionStorageKey);
+    }
+  }, []);
+
+  return { phase, setPhase };
+}
+
+function ProviderAutoUpdateBootstrap() {
+  const providers = useAtomValue(primaryServerProvidersAtom);
+  const settings = usePrimarySettings();
+  const primaryEnvironment = usePrimaryEnvironment();
+  const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
+    reportFailure: false,
+  });
+  const hasRan = useAutoUpdateHasRan();
+  const { phase, setPhase } = useAutoUpdatePhase();
+  const [started, setStarted] = useState(false);
+  const trackedRef = useRef<Set<string> | null>(null);
+
+  const shouldAutoUpdate =
+    settings.autoUpdateProvidersOnStartup &&
+    !hasRan &&
+    primaryEnvironment &&
+    !autoUpdateSessionRef.current;
+
+  const { candidates, statuses } = useMemo(
+    () => collectAutoUpdateSessionState(providers),
+    [providers],
+  );
+
+  const terminal = allUpdatesTerminal(statuses);
+
+  useEffect(() => {
+    if (!shouldAutoUpdate || candidates.length === 0 || started) return;
+
+    autoUpdateSessionRef.current = true;
+    setStarted(true);
+    setPhase("updating");
+
+    void (async () => {
+      for (const candidate of candidates) {
+        await updateProvider({
+          environmentId: primaryEnvironment!.environmentId,
+          input: {
+            provider: candidate.driver,
+            instanceId: candidate.instanceId,
+          },
+        });
+      }
+      // Wait for config stream to reflect final state
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      localStorage.setItem(AUTO_UPDATE_RAN, "true");
+    })();
+  }, [shouldAutoUpdate, candidates, started, primaryEnvironment, updateProvider, setPhase]);
+
+  useEffect(() => {
+    if (!started) return;
+    if (trackedRef.current === null) {
+      trackedRef.current = new Set();
+    }
+    for (const s of statuses) {
+      trackedRef.current.add(s.instanceId);
+    }
+  }, [statuses, started]);
+
+  useEffect(() => {
+    if (terminal && started) {
+      setPhase(allUpdatesTerminal(statuses) ? "done" : "failed");
+    }
+  }, [terminal, statuses, started, setPhase]);
+
+  const handleContinue = useCallback(() => {
+    localStorage.removeItem(AUTO_UPDATE_RAN);
+    setPhase("skipped");
+  }, [setPhase]);
+
+  if (phase === "skipped") {
+    return null;
+  }
+
+  return <ProviderAutoUpdateOverlay phase={phase} onContinue={handleContinue} />;
+}
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -136,7 +267,8 @@ function RootRouteView() {
         <HostedStaticEnvironmentBootstrap />
         {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
         {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
-        {appShell}
+        {primaryEnvironmentAuthenticated ? <ProviderAutoUpdateBootstrap /> : null}
+        <div className="relative">{appShell}</div>
       </AnchoredToastProvider>
     </ToastProvider>
   );

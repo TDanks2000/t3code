@@ -40,6 +40,7 @@ const readCommandLookupEnv = CommandLookupEnvConfig.pipe(Effect.orElseSucceed(()
 export interface ProviderMaintenanceCapabilities {
   readonly provider: ProviderDriverKind;
   readonly packageName: string | null;
+  readonly repository: string | null;
   readonly update: ProviderMaintenanceCommandAction | null;
 }
 
@@ -67,6 +68,7 @@ export interface PackageManagedProviderMaintenanceDefinition {
   readonly provider: ProviderDriverKind;
   readonly npmPackageName: string;
   readonly homebrewFormula: string | null;
+  readonly repository: string | null;
   readonly nativeUpdate: {
     readonly executable: string;
     readonly args: ReadonlyArray<string>;
@@ -97,6 +99,7 @@ function nonEmptyString(value: unknown): string | null {
 export function makeProviderMaintenanceCapabilities(input: {
   readonly provider: ProviderDriverKind;
   readonly packageName: string | null;
+  readonly repository: string | null;
   readonly updateExecutable: string | null;
   readonly updateArgs: ReadonlyArray<string>;
   readonly updateLockKey: string | null;
@@ -113,6 +116,7 @@ export function makeProviderMaintenanceCapabilities(input: {
   return {
     provider: input.provider,
     packageName: input.packageName,
+    repository: input.repository,
     update,
   };
 }
@@ -120,10 +124,12 @@ export function makeProviderMaintenanceCapabilities(input: {
 export function makeManualOnlyProviderMaintenanceCapabilities(input: {
   readonly provider: ProviderDriverKind;
   readonly packageName: string | null;
+  readonly repository?: string | null;
 }): ProviderMaintenanceCapabilities {
   return makeProviderMaintenanceCapabilities({
     provider: input.provider,
     packageName: input.packageName,
+    repository: input.repository ?? null,
     updateExecutable: null,
     updateArgs: [],
     updateLockKey: null,
@@ -136,6 +142,7 @@ function makeNpmGlobalProviderMaintenanceCapabilities(
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: "npm",
     updateArgs: ["install", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "npm-global",
@@ -148,6 +155,7 @@ function makeBunGlobalProviderMaintenanceCapabilities(
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: "bun",
     updateArgs: ["i", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "bun-global",
@@ -160,6 +168,7 @@ function makePnpmGlobalProviderMaintenanceCapabilities(
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: "pnpm",
     updateArgs: ["add", "-g", `${definition.npmPackageName}@latest`],
     updateLockKey: "pnpm-global",
@@ -172,6 +181,7 @@ function makeVitePlusGlobalProviderMaintenanceCapabilities(
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: "vp",
     updateArgs: ["i", "-g", definition.npmPackageName],
     updateLockKey: "vite-plus-global",
@@ -185,12 +195,14 @@ function makeHomebrewProviderMaintenanceCapabilities(
     return makeManualOnlyProviderMaintenanceCapabilities({
       provider: definition.provider,
       packageName: definition.npmPackageName,
+      repository: definition.repository,
     });
   }
 
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: "brew",
     updateArgs: ["upgrade", definition.homebrewFormula],
     updateLockKey: "homebrew",
@@ -207,6 +219,7 @@ function makeNativeProviderMaintenanceCapabilities(
   return makeProviderMaintenanceCapabilities({
     provider: definition.provider,
     packageName: definition.npmPackageName,
+    repository: definition.repository,
     updateExecutable: definition.nativeUpdate.executable,
     updateArgs: definition.nativeUpdate.args,
     updateLockKey: definition.nativeUpdate.lockKey,
@@ -394,6 +407,12 @@ function deriveVersionAdvisory(input: {
   return { status: "current", message: null };
 }
 
+function constructChangelogUrl(repository: string | null, version: string): string | null {
+  if (!repository) return null;
+  const tag = version.startsWith("v") ? version : `v${version}`;
+  return `https://github.com/${repository}/releases/tag/${tag}`;
+}
+
 export function createProviderVersionAdvisory(input: {
   readonly driver: ProviderDriverKind;
   readonly currentVersion: string | null;
@@ -417,6 +436,9 @@ export function createProviderVersionAdvisory(input: {
     canUpdate: capabilities.update !== null,
     checkedAt: input.checkedAt ?? null,
     message: advisory.message,
+    changelogUrl: latestVersion
+      ? constructChangelogUrl(capabilities.repository, latestVersion)
+      : null,
   };
 }
 

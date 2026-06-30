@@ -432,11 +432,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
       ),
     );
 
-  const inventoryExit = yield* Effect.exit(
-    loadInventory().pipe(
-      Effect.retry({ times: 1 }),
-    ),
-  );
+  const inventoryExit = yield* Effect.exit(loadInventory().pipe(Effect.retry({ times: 1 })));
   if (inventoryExit._tag === "Failure") {
     return fallback(Cause.squash(inventoryExit.cause), version);
   }
